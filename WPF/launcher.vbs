@@ -1,0 +1,1 @@
+CreateObject("Wscript.Shell").Run "powershell -ExecutionPolicy Bypass -File ""Image_Crop_Tool-WPF.ps1""", 0, False
