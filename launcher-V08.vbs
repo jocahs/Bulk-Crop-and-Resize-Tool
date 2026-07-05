@@ -1,1 +1,0 @@
-CreateObject("Wscript.Shell").Run "powershell -ExecutionPolicy Bypass -File ""Image_Crop_Tool-DP-V08.ps1""", 0, False
