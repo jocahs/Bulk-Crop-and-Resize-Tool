@@ -15,7 +15,6 @@ namespace ImageCropTool
             InitializeComponent();
             // Set initial states
             UpdateUnitAvailability();
-            UpdateMarginAvailability();
             UpdateFilenameAvailability();
             UpdateFilenameLayout();
             UpdateSourceFilename();
@@ -38,13 +37,24 @@ namespace ImageCropTool
         private void Action_CheckedChanged(object sender, RoutedEventArgs e)
         {
             UpdateUnitAvailability();
-            UpdateMarginAvailability();
             UpdateFilenameLayout();
         }
 
         private void Unit_CheckedChanged(object sender, RoutedEventArgs e)
         {
-            UpdateUnitAvailability();
+
+            if (UnitPixels.IsChecked == true)
+            {
+                Resources["UnitText"] = "px";
+            }
+            else if (UnitMM.IsChecked == true)
+            {
+                Resources["UnitText"] = "mm";
+            }
+            else if (UnitPer.IsChecked == true)
+            {
+                Resources["UnitText"] = "%";
+            }
         }
 
         private void NoOverwrite_CheckedChanged(object sender, RoutedEventArgs e)
@@ -57,19 +67,14 @@ namespace ImageCropTool
             // UnitPer should only be available when ActionResize is selected
             bool isResize = ActionResize.IsChecked == true;
             UnitPer.IsEnabled = isResize;
+            StackRatio.IsEnabled = isResize;
+            AspectRatio.IsChecked = isResize;
+            MarginsSettings.IsEnabled = !isResize;
 
             // If UnitPer is selected but now disabled, switch to Pixels
             if (!isResize && UnitPer.IsChecked == true)
             {
                 UnitPixels.IsChecked = true;
-            }
-        }
-
-        private void UpdateMarginAvailability()
-        {
-            if (MarginsSettings != null)
-            {
-                MarginsSettings.IsEnabled = ActionCrop.IsChecked == true;
             }
         }
 
@@ -113,11 +118,7 @@ namespace ImageCropTool
                 }
             }
         }
-        private void DstBrowse_Click(object sender, RoutedEventArgs e)
-        {
-            BrowseOutputFolder();
-        }
-
+        
         private void BrowseForFile(string initialPath = "")
         {
             var dialog = new OpenFileDialog
@@ -158,6 +159,10 @@ namespace ImageCropTool
             {
                 SetFilePath(dialog.SelectedPath);
             }
+        }
+        private void DstBrowse_Click(object sender, RoutedEventArgs e)
+        {
+            BrowseOutputFolder();
         }
         private void BrowseOutputFolder(string initialPath = "")
         {
