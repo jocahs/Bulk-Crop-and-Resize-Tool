@@ -1,12 +1,10 @@
 ﻿using Microsoft.Win32;
 using System;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-<<<<<<< HEAD
-using System.IO;
-=======
->>>>>>> 54142bc566c12e144141ffe1f628899785c8b9ac
+using static System.Windows.Forms.VisualStyles.VisualStyleElement.Window;
 
 namespace ImageCropTool
 {
@@ -15,19 +13,12 @@ namespace ImageCropTool
         public MainWindow()
         {
             InitializeComponent();
-<<<<<<< HEAD
-=======
-
->>>>>>> 54142bc566c12e144141ffe1f628899785c8b9ac
             // Set initial states
             UpdateUnitAvailability();
             UpdateMarginAvailability();
             UpdateFilenameAvailability();
             UpdateFilenameLayout();
-<<<<<<< HEAD
             UpdateSourceFilename();
-=======
->>>>>>> 54142bc566c12e144141ffe1f628899785c8b9ac
 
             // Attach event handlers
             ActionCrop.Checked += Action_CheckedChanged;
@@ -39,21 +30,10 @@ namespace ImageCropTool
             NoOverwriteChk.Unchecked += NoOverwrite_CheckedChanged;
             ModePrefix.Checked += ModePrefix_Checked;
             ModeSuffix.Checked += ModeSuffix_Checked;
-<<<<<<< HEAD
             UnitPer.IsEnabled = false;
             SrcBox.TextChanged += SrcBox_TextChanged;
         }
 
-=======
-            NameBox.TextChanged += NameBox_TextChanged;
-            UnitPer.IsEnabled = false;
-        }
-
-        private void NameBox_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            UpdatePreviewLabel();
-        }
->>>>>>> 54142bc566c12e144141ffe1f628899785c8b9ac
 
         private void Action_CheckedChanged(object sender, RoutedEventArgs e)
         {
@@ -97,7 +77,6 @@ namespace ImageCropTool
         {
             // All filename controls should be enabled only when NoOverwriteChk is checked
             bool isEnabled = NoOverwriteChk.IsChecked == true;
-<<<<<<< HEAD
           
             ModePrefix.IsEnabled = isEnabled;
             ModeSuffix.IsEnabled = isEnabled;
@@ -113,14 +92,6 @@ namespace ImageCropTool
                 NameStackPanel.Children.Add(NameExample);
                 NameStackPanel.Children.Add(NameExtension);
             }
-=======
-
-            ModePrefix.IsEnabled = isEnabled;
-            ModeSuffix.IsEnabled = isEnabled;
-            NameExample.IsEnabled = isEnabled;
-            NameBox.IsEnabled = isEnabled;
-            UpdatePreviewLabel();
->>>>>>> 54142bc566c12e144141ffe1f628899785c8b9ac
         }
 
         private void SrcBrowse_Click(object sender, RoutedEventArgs e)
@@ -142,6 +113,11 @@ namespace ImageCropTool
                 }
             }
         }
+        private void DstBrowse_Click(object sender, RoutedEventArgs e)
+        {
+            BrowseOutputFolder();
+        }
+
         private void BrowseForFile(string initialPath = "")
         {
             var dialog = new OpenFileDialog
@@ -167,7 +143,6 @@ namespace ImageCropTool
             }
         }
 
-<<<<<<< HEAD
         private void BrowseForFolder(string initialPath = "")
         {
             using var dialog = new System.Windows.Forms.FolderBrowserDialog();
@@ -184,12 +159,28 @@ namespace ImageCropTool
                 SetFilePath(dialog.SelectedPath);
             }
         }
+        private void BrowseOutputFolder(string initialPath = "")
+        {
+            using var dialog = new System.Windows.Forms.FolderBrowserDialog();
+            dialog.Description = "Select a folder to save the image(s)";
+            dialog.ShowNewFolderButton = true;
+
+            if (!string.IsNullOrEmpty(initialPath) && System.IO.Directory.Exists(initialPath))
+            {
+                dialog.SelectedPath = initialPath;
+            }
+
+            if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            {
+                SetOutputPath(dialog.SelectedPath);
+            }
+        }
         private void UpdateSourceFilename()
         {
             string path = SrcBox.Text;
 
             // If the text is empty or the placeholder, show "filename"
-            if (string.IsNullOrEmpty(path) || path == "Write/paste path...")
+            if (string.IsNullOrEmpty(path) || path == "Write/Paste/Browse the source path of a file or folder ------------->")
             {
                 NameExample.Text = "filename";
                 return;
@@ -241,12 +232,25 @@ namespace ImageCropTool
                 LogTextBox.AppendText($"Selected folder: {filePath}\n");
             }
         }
+        private void SetOutputPath(string filePath)
+        {
+            DstBox.Text = filePath;
+
+            DstBox.FlowDirection = FlowDirection.RightToLeft;
+            DstBox.TextAlignment = TextAlignment.Right;
+            DstBox.HorizontalContentAlignment = HorizontalAlignment.Right;
+
+           if (System.IO.Directory.Exists(filePath))
+            {
+                LogTextBox.AppendText($"Output folder: {filePath}\n");
+            }
+        }
         private void SrcBox_TextChanged(object sender, TextChangedEventArgs e)
         {
             string currentText = SrcBox.Text;
 
             // Check if it's the default placeholder or empty
-            if (string.IsNullOrEmpty(currentText) || currentText == "Write/paste path...")
+            if (string.IsNullOrEmpty(currentText) || currentText == "Write/Paste/Browse the source path of a file or folder ------------->")
             {
                 // Left align for default text
                 SrcBox.FlowDirection = FlowDirection.LeftToRight;
@@ -276,7 +280,7 @@ namespace ImageCropTool
 
         private void SrcBox_GotFocus(object sender, RoutedEventArgs e)
         {
-            if (SrcBox.Text == "Write/paste path...")
+            if (SrcBox.Text == "Write/Paste/Browse the source path of a file or folder ------------->")
             {
                 SrcBox.Text = "";
                 SrcBox.FlowDirection = FlowDirection.LeftToRight;
@@ -289,15 +293,13 @@ namespace ImageCropTool
         {
             if (string.IsNullOrWhiteSpace(SrcBox.Text))
             {
-                SrcBox.Text = "Write/paste path...";
+                SrcBox.Text = "Write/Paste/Browse the source path of a file or folder ------------->";
                 SrcBox.FlowDirection = FlowDirection.LeftToRight;
                 SrcBox.TextAlignment = TextAlignment.Left;
                 SrcBox.HorizontalContentAlignment = HorizontalAlignment.Left;
             }
         }
 
-=======
->>>>>>> 54142bc566c12e144141ffe1f628899785c8b9ac
         private void ModePrefix_Checked(object sender, RoutedEventArgs e)
         {
             UpdateFilenameLayout();
@@ -312,7 +314,6 @@ namespace ImageCropTool
 
         private void UpdateFilenameLayout()
         {
-<<<<<<< HEAD
             // Update the source filename first
             UpdateSourceFilename();
 
@@ -356,95 +357,12 @@ namespace ImageCropTool
                 NameStackPanel.Children.Add(NameExample);
                 NameStackPanel.Children.Add(NameBox);
                 NameStackPanel.Children.Add(NameExtension);
-=======
-            bool isPrefix = ModePrefix.IsChecked == true;
-            bool isResize = ActionResize.IsChecked == true;
-
-            // Determine the text based on action and mode
-            string defaultText;
-            if (isResize)
-            {
-                defaultText = isPrefix ? "resized_" : "_resized";
             }
-            else
-            {
-                defaultText = isPrefix ? "cropped_" : "_cropped";
-            }
-
-            // Check if the current text is a default value
-            string currentText = NameBox.Text;
-            bool isDefaultText = currentText == "_cropped" || currentText == "_resized" ||
-                                 currentText == "cropped_" || currentText == "resized_";
-
-            // If user has custom text, store it
-            if (!isDefaultText && !string.IsNullOrEmpty(currentText))
-            {
-                userCustomText = currentText;
-            }
-
-            if (isPrefix)
-            {
-                // Prefix mode: TextBox on left, Label on right
-                NameBox.Text = userCustomText ?? defaultText;
-                NameExample.Content = "filename";
-
-                // Set Grid.Column
-                Grid.SetColumn(NameExample, 4);
-                Grid.SetColumn(NameBox, 2);
-
-                // Set HorizontalAlignment
-                NameBox.HorizontalAlignment = HorizontalAlignment.Right;
-                NameBox.HorizontalContentAlignment = HorizontalAlignment.Right;
-                NameExample.HorizontalAlignment = HorizontalAlignment.Left;
-                NameExample.HorizontalContentAlignment = HorizontalAlignment.Left;
-
-                // Set Margins
-                NameBox.Margin = new Thickness(0, 4, 2, 0);
-                NameExample.Margin = new Thickness(0, 0, 0, 0);
-            }
-            else // Suffix mode (default)
-            {
-                // Suffix mode: Label on left, TextBox on right
-                NameBox.Text = userCustomText ?? defaultText;
-                NameExample.Content = "filename";
-
-                // Set Grid.Column
-                Grid.SetColumn(NameExample, 2);
-                Grid.SetColumn(NameBox, 4);
-
-                // Set HorizontalAlignment
-                NameBox.HorizontalAlignment = HorizontalAlignment.Left;
-                NameBox.HorizontalContentAlignment = HorizontalAlignment.Left;
-                NameExample.HorizontalAlignment = HorizontalAlignment.Right;
-                NameExample.HorizontalContentAlignment = HorizontalAlignment.Right;
-
-                // Set Margins
-                NameBox.Margin = new Thickness(2, 4, 0, 0);
-                NameExample.Margin = new Thickness(0, 0, 0, 0);
-            }
-
-            UpdatePreviewLabel();
         }
-        private void UpdatePreviewLabel()
-        {
-            string namebox = NameBox.Text;
-            string nameexample = NameExample.Content?.ToString() ?? "";
-            bool overwriteChk = NoOverwriteChk.IsChecked == false;
-            bool isPrefix = ModePrefix.IsChecked == true;
 
-            if (overwriteChk)
-            {
-                PreviewLabel.Text = $"{nameexample}";
-            }
-            else if (isPrefix)
-            {
-                PreviewLabel.Text = $"{namebox}{nameexample}";
-            }
-            else
-            {
-                PreviewLabel.Text = $"{nameexample}{namebox}";
->>>>>>> 54142bc566c12e144141ffe1f628899785c8b9ac
-            }
+        private void Button_Click(object sender, RoutedEventArgs e)
+        {
+
         }
     }
 }

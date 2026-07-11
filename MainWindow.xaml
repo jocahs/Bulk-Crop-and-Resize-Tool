@@ -5,10 +5,7 @@
         Width="1060" Height="720" 
         WindowStartupLocation="CenterScreen">
 
-<<<<<<< HEAD
 
-=======
->>>>>>> 54142bc566c12e144141ffe1f628899785c8b9ac
     <Window.Resources>
         <!-- Style for all RadioButtons when disabled -->
         <Style TargetType="RadioButton">
@@ -97,18 +94,14 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-<<<<<<< HEAD
                 <TextBox x:Name="SrcBox" Grid.Column="0" Margin="0,0,5,0" 
-                     Text="Write/paste path..." 
+                     Text="Write/Paste/Browse the source path of a file or folder ------------->" 
                      TextAlignment="Left"
                      VerticalContentAlignment="Center"
                      HorizontalContentAlignment="Left"
                      GotFocus="SrcBox_GotFocus"
                      LostFocus="SrcBox_LostFocus"
-                     TextChanged="SrcBox_TextChanged" />
-=======
-                <TextBox x:Name="SrcBox" Grid.Column="0" Margin="0,0,5,0" Text="Write/paste path..." />
->>>>>>> 54142bc566c12e144141ffe1f628899785c8b9ac
+                     TextChanged="SrcBox_TextChanged" FontStyle="Italic"/>
                 <Button Grid.Column="1" Content="Browse" Width="50" Height="25" Click="SrcBrowse_Click" />
             </Grid>
 
@@ -129,8 +122,8 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBox x:Name="DstBox" Grid.Column="0" Margin="0,0,5,0" Text="Output folder..." />
-                <Button Grid.Column="1" Content="Browse" Width="50" Height="25" />
+                <TextBox x:Name="DstBox" Grid.Column="0" Margin="0,0,5,0" Text="Write/Paste/Browse output path if different from source folder --->" VerticalContentAlignment="Center" FontStyle="Italic"/>
+                <Button Grid.Column="1" Content="Browse" Width="50" Height="25" Click="DstBrowse_Click" />
             </Grid>
 
             <Separator Margin="0,5,0,0" />
@@ -139,20 +132,13 @@
             <GroupBox Header="Output Filename" Margin="0,0,0,0">
                 <Grid x:Name="NameGrid">
                     <Grid.RowDefinitions>
-<<<<<<< HEAD
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto"/>
-=======
-                        <RowDefinition Height="auto" />
-                        <RowDefinition Height="auto" />
-                        <RowDefinition Height="auto"/>
->>>>>>> 54142bc566c12e144141ffe1f628899785c8b9ac
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="70" />
                         <ColumnDefinition Width="1" />
                         <ColumnDefinition Width="*" />
-<<<<<<< HEAD
                     </Grid.ColumnDefinitions>
 
                     <StackPanel Grid.RowSpan="2" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,5,0,0">
@@ -179,36 +165,6 @@
                         <TextBlock x:Name="NameExtension" Text=".jpg"  FontSize="16" Margin="2,0,0,0" HorizontalAlignment="Left" TextAlignment="Left" VerticalAlignment="Center" Foreground="Red"  FontWeight="Bold" FontStyle="Italic" />
 
                     </StackPanel>
-=======
-                        <ColumnDefinition Width="1" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="10" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-
-                    <StackPanel Grid.RowSpan="3" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,0">
-                        <CheckBox x:Name="NoOverwriteChk" IsChecked="True" 
-                              HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,10,0,2">
-                            <CheckBox.LayoutTransform>
-                                <ScaleTransform ScaleX="1.5" ScaleY="1.5" />
-                            </CheckBox.LayoutTransform>
-                        </CheckBox>
-
-                        <TextBlock Text="Don't overwrite" TextWrapping="Wrap" TextAlignment="Center" Width="auto" FontSize="16" FontWeight="Bold" />
-                    </StackPanel>
-
-                    <Border Grid.RowSpan="4" Grid.Column="1" BorderBrush="LightGray" BorderThickness="1,0,0,0" Margin="0,4,0,4" Width="1" />
-
-                    <RadioButton x:Name="ModePrefix" Grid.Row="0" Grid.Column="2" Margin="60,0,0,0" FontSize="16" Content="Prefix" Checked="ModePrefix_Checked"/>
-                    <Label x:Name="NameExample" Grid.Row="1" Grid.Column="2" Content="filename" Height="35" FontSize="18" Margin="0,0,0,0" Width="auto"  HorizontalAlignment="Right" HorizontalContentAlignment="Right" />
-                    <TextBlock x:Name="PreviewLabel" Grid.Row="2" Grid.Column="2" Grid.ColumnSpan="3" Text="filename_cropped" HorizontalAlignment="Center"  TextAlignment="Center" Foreground="Red" FontSize="18" FontWeight="Bold" Margin="0,0,0,0" Width="auto"/>
-                    
-                    
-                    <TextBlock Text="+" Grid.Row="1" Grid.Column="3" TextAlignment="Center" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,0" />
-                   
-                     <RadioButton x:Name="ModeSuffix" Grid.Row="0" Grid.Column="4" IsChecked="True" Margin="0,0,0,0" FontSize="16" Content="Suffix"/>
-                    <TextBox x:Name="NameBox" Grid.Row="1" Grid.Column="4" Text="_cropped" HorizontalAlignment="left" HorizontalContentAlignment="Left" VerticalAlignment="Top" FontSize="18" Margin="2,4,0,0"  Width="100" MaxLength="10"/>
->>>>>>> 54142bc566c12e144141ffe1f628899785c8b9ac
                 </Grid>
             </GroupBox>
 
