@@ -224,7 +224,7 @@
                         <TextBlock Text="Dimensions"  FontWeight="Bold" FontSize="14" Margin="0,0,0,5"/>
                     </GroupBox.Header>
 
-                    <Grid>
+                    <Grid >
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
@@ -232,34 +232,30 @@
                         </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="45" />
-                            <ColumnDefinition Width="70" />
-                            <ColumnDefinition Width="70" />
+                            <ColumnDefinition Width="50" />
+                            <ColumnDefinition Width="20" />
+                            <ColumnDefinition Width="50" />
+                            <ColumnDefinition Width="20" />
                             <ColumnDefinition Width="55" />
                         </Grid.ColumnDefinitions>
 
                         <Label Grid.Row="1" Grid.Column="0" Content="Source:" Margin="-5,0,0,0"  HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
-                        <StackPanel Orientation="Horizontal" Grid.Row="1" Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="-10,0,0,0">
-                            <TextBox x:Name="WidthSourceBox" Text="0" Grid.Row="1" Grid.Column="1" IsReadOnly="True" Background="LightGray" TextAlignment="Right" Margin="5,0,0,0"  Height="20" Width="40" Padding="0,0,0,0" HorizontalAlignment="Center"/>
-                            <Label Content="{DynamicResource UnitText}" Margin="0,0,0,3" VerticalAlignment="Center" HorizontalAlignment="Right" FontSize="12"/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Grid.Row="1" Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="-5,0,0,0">
-                            <TextBox x:Name="HeightSourceBox" Text="0" IsReadOnly="True" Background="LightGray" TextAlignment="Right" Margin="0,0,0,0"  Height="20" Width="40" Padding="0,0,0,0" HorizontalAlignment="Center"/>
-                            <Label Content="{DynamicResource UnitText}" Margin="0,0,0,3" VerticalAlignment="Center" HorizontalAlignment="Right" FontSize="12"/>
-                        </StackPanel>
+                        <TextBox x:Name="WidthSourceBox" Text="0" Grid.Row="1" Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center" IsReadOnly="True" Background="LightGray" TextAlignment="Right" Margin="0,0,0,0"  Height="20" Width="40" Padding="0,0,0,0"/>
+                        <Label Content="{DynamicResource UnitText}" Margin="0,0,0,0" Padding="0" Grid.Row="1" Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="12"/>
+                        <TextBox x:Name="HeightSourceBox" Text="0"  Grid.Row="1" Grid.Column="3" IsReadOnly="True" Background="LightGray" TextAlignment="Right" Margin="0,0,0,0"  Height="20" Width="40" Padding="0,0,0,0" HorizontalAlignment="Center"/>
+                        <Label Content="{DynamicResource UnitText}" Margin="0,0,0,0" Padding="0" Grid.Row="1" Grid.Column="4" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="12"/>
+
 
                         <Label Grid.Row="2" Grid.Column="0" Content="Output:" Margin="-5,0,0,0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" />
                         
-                        <StackPanel Orientation="Horizontal" Grid.Row="2" Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="-10,0,0,0">
-                            <xctk:IntegerUpDown Value="1024" x:Name="WidthBox" TextAlignment="Right" Margin="5,0,0,0" Height="20" Width="40" MaxLength="5" Minimum="1" Maximum="99999" Padding="0,0,0,0" HorizontalAlignment="Center" ShowButtonSpinner="False"/>                            
-                            <Label Content="{DynamicResource UnitText}" Margin="0,0,0,3" VerticalAlignment="Center" HorizontalAlignment="Right" FontSize="12"/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Grid.Row="2" Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="-5,0,0,0">
-                            <xctk:IntegerUpDown Value="768" x:Name="HeightBox" TextAlignment="Right" Margin="3,0,0,0"  Height="20" Width="40" MaxLength="5" Padding="0,0,0,0" HorizontalAlignment="Center" ShowButtonSpinner="False"/>
-                            <Label Content="{DynamicResource UnitText}" Margin="0,0,0,3" VerticalAlignment="Center" HorizontalAlignment="Right" FontSize="12"/>
-                        </StackPanel>
+                        <xctk:IntegerUpDown Value="1024" x:Name="WidthBox" Grid.Row="2" Grid.Column="1" TextAlignment="Right" Margin="0,0,0,0" Height="20" Width="40" MaxLength="5" Minimum="1" Maximum="99999" Padding="0,0,0,0" HorizontalAlignment="Center" ShowButtonSpinner="False"/>
+                        <Label Content="{DynamicResource UnitText}" Margin="0,0,0,0" Padding="0" Grid.Row="2" Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="12"/>
 
-                        <Label Grid.Row="0" Grid.Column="1" Content="↔" FontSize="40" Margin="-12,-20,15,-10" Padding="0" HorizontalContentAlignment="Center"/>
-                        <Label Grid.Row="0" Grid.Column="2" Content="↕" FontSize="30" Margin="-12,-10,15,-10" Padding="0" HorizontalContentAlignment="Center" FontWeight="Bold"/>
+                        <xctk:IntegerUpDown Value="768" x:Name="HeightBox"  Grid.Row="2" Grid.Column="3" TextAlignment="Right" Margin="0,0,0,0"  Height="20" Width="40" MaxLength="5" Padding="0,0,0,0" HorizontalAlignment="Center" ShowButtonSpinner="False"/>
+                        <Label Content="{DynamicResource UnitText}" Margin="0,0,0,0" Padding="0" Grid.Row="2" Grid.Column="4" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="12"/>
+
+                        <Label Grid.Row="0" Grid.Column="1" Content="↔" FontSize="40" Margin="0,-20,0,-10" Padding="0" HorizontalContentAlignment="Center"/>
+                        <Label Grid.Row="0" Grid.Column="3" Content="↕" FontSize="30" Margin="0,-15,0,-10" Padding="0" HorizontalContentAlignment="Center" FontWeight="Bold"/>
                         <StackPanel x:Name="StackRatio" Orientation="Vertical" Grid.Row="0" Grid.RowSpan="3" Grid.Column="5" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,5,0,0">
                             <CheckBox x:Name="AspectRatio" IsChecked="True"  HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,0">
                                 <CheckBox.LayoutTransform>

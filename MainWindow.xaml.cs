@@ -4,6 +4,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using Xceed.Wpf.Toolkit;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement.Window;
 
 namespace ImageCropTool
@@ -18,6 +19,7 @@ namespace ImageCropTool
             UpdateFilenameAvailability();
             UpdateFilenameLayout();
             UpdateSourceFilename();
+            UpdateAllTextBoxes();
 
             // Attach event handlers
             ActionCrop.Checked += Action_CheckedChanged;
@@ -31,30 +33,38 @@ namespace ImageCropTool
             ModeSuffix.Checked += ModeSuffix_Checked;
             UnitPer.IsEnabled = false;
             SrcBox.TextChanged += SrcBox_TextChanged;
+            WidthBox.ValueChanged += WidthBox_ValueChanged;
+            HeightBox.ValueChanged += HeightBox_ValueChanged;
+            MarginLeftBox.ValueChanged += MarginLeftBox_ValueChanged;
+            MargintopBox.ValueChanged += MargintopBox_ValueChanged;
         }
 
 
         private void Action_CheckedChanged(object sender, RoutedEventArgs e)
         {
+            if (ActionResize.IsChecked == true)
+            {
+                // Set output size equal to source (100%)
+                outputWidthPx = sourceWidthPx;
+                outputHeightPx = sourceHeightPx;
+                // Margins are irrelevant in resize mode; set to 0
+                marginLeftPx = 0;
+                marginTopPx = 0;
+
+                // Switch to Percentage unit – this will fire Unit_CheckedChanged and update all boxes
+                UnitPer.IsChecked = true;
+            }
+            // If Crop is selected, we do not change the pixel values here.
+            // UnitPer will be disabled by UpdateUnitAvailability().
             UpdateUnitAvailability();
             UpdateFilenameLayout();
         }
 
         private void Unit_CheckedChanged(object sender, RoutedEventArgs e)
         {
-
-            if (UnitPixels.IsChecked == true)
-            {
-                Resources["UnitText"] = "px";
-            }
-            else if (UnitMM.IsChecked == true)
-            {
-                Resources["UnitText"] = "mm";
-            }
-            else if (UnitPer.IsChecked == true)
-            {
-                Resources["UnitText"] = "%";
-            }
+            string unit = GetCurrentUnit();
+            Resources["UnitText"] = unit == "px" ? "px" : unit == "mm" ? "mm" : "%";
+            UpdateAllTextBoxes();
         }
 
         private void NoOverwrite_CheckedChanged(object sender, RoutedEventArgs e)
@@ -365,9 +375,139 @@ namespace ImageCropTool
             }
         }
 
-        private void Button_Click(object sender, RoutedEventArgs e)
-        {
+        private const double Dpi = 96.0;               // Standard screen DPI
+        private const double MmPerInch = 25.4;
 
+        // These store the *real* pixel values of the source and current settings.
+        // Initially filled with example values – you'll update these when an image is loaded.
+        private int sourceWidthPx = 2000;
+        private int sourceHeightPx = 1000;
+        private int outputWidthPx = 1024;
+        private int outputHeightPx = 768;
+        private int marginLeftPx = 0;
+        private int marginTopPx = 0;
+
+        private string GetCurrentUnit()
+        {
+            if (UnitPixels.IsChecked == true) return "px";
+            if (UnitMM.IsChecked == true) return "mm";
+            if (UnitPer.IsChecked == true) return "%";
+            return "px";
         }
+
+        private double ConvertPixelsToUnit(int pixels, string unit)
+        {
+            if (unit == "px") return pixels;
+            if (unit == "mm") return pixels / Dpi * MmPerInch;
+            return pixels; // fallback
+        }
+
+        private int ConvertUnitToPixels(double value, string unit)
+        {
+            if (unit == "px") return (int)Math.Round(value);
+            if (unit == "mm") return (int)Math.Round(value / MmPerInch * Dpi);
+            return (int)value;
+        }
+
+        private string FormatValue(double value)
+        {
+            return ((int)Math.Round(value)).ToString();
+        }
+
+        private void UpdateAllTextBoxes()
+        {
+            if (_updatingUI) return;
+            _updatingUI = true;
+            try
+            {
+                string unit = GetCurrentUnit();
+
+                if (unit == "%")
+                {
+                    WidthSourceBox.Text = "100";
+                    HeightSourceBox.Text = "100";
+
+                    double percentW = (double)outputWidthPx / sourceWidthPx * 100;
+                    double percentH = (double)outputHeightPx / sourceHeightPx * 100;
+                    // Round to nearest integer
+                    WidthBox.Value = (int)Math.Round(percentW);
+                    HeightBox.Value = (int)Math.Round(percentH);
+                    // Margins are always 0 in percentage mode
+                    MarginLeftBox.Value = 0;
+                    MargintopBox.Value = 0;
+                }
+                else
+                {
+                    // Convert from stored pixel values to the current unit, then round to integer
+                    int srcW = (int)Math.Round(ConvertPixelsToUnit(sourceWidthPx, unit));
+                    int srcH = (int)Math.Round(ConvertPixelsToUnit(sourceHeightPx, unit));
+                    int outW = (int)Math.Round(ConvertPixelsToUnit(outputWidthPx, unit));
+                    int outH = (int)Math.Round(ConvertPixelsToUnit(outputHeightPx, unit));
+                    int mL = (int)Math.Round(ConvertPixelsToUnit(marginLeftPx, unit));
+                    int mT = (int)Math.Round(ConvertPixelsToUnit(marginTopPx, unit));
+
+                    WidthSourceBox.Text = srcW.ToString();
+                    HeightSourceBox.Text = srcH.ToString();
+                    WidthBox.Value = outW;
+                    HeightBox.Value = outH;
+                    MarginLeftBox.Value = mL;
+                    MargintopBox.Value = mT;
+                }
+            }
+            finally
+            {
+                _updatingUI = false;
+            }
+        }
+
+        private void WidthBox_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            if (_updatingUI || !IsLoaded) return;
+            UpdatePixelFromBox(WidthBox, ref outputWidthPx, sourceWidthPx);
+        }
+
+        private void HeightBox_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            if (_updatingUI || !IsLoaded) return;
+            UpdatePixelFromBox(HeightBox, ref outputHeightPx, sourceHeightPx);
+        }
+
+        private void MarginLeftBox_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            if (_updatingUI || !IsLoaded) return;
+            UpdatePixelFromBox(MarginLeftBox, ref marginLeftPx, sourceWidthPx);
+        }
+
+        private void MargintopBox_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            if (_updatingUI || !IsLoaded) return;
+            UpdatePixelFromBox(MargintopBox, ref marginTopPx, sourceHeightPx);
+        }
+
+        private void UpdatePixelFromBox(IntegerUpDown box, ref int pixelField, int sourceDimensionPx)
+        {
+            string unit = GetCurrentUnit();
+            double displayValue = box.Value ?? 0; // IntegerUpDown.Value is double?
+
+            if (unit == "%")
+            {
+                // Displayed value is a percentage of the source dimension
+                double percent = displayValue;
+                pixelField = (int)Math.Round(percent / 100.0 * sourceDimensionPx);
+            }
+            else
+            {
+                // Pixel or Millimeter – convert to pixels
+                pixelField = ConvertUnitToPixels(displayValue, unit);
+            }
+
+            // After updating the field, refresh all text boxes to show the new value
+            // in the current unit (avoids rounding inconsistencies)
+            UpdateAllTextBoxes();
+        }
+
+        private bool _updatingUI = false;
+
+
     }
 }
