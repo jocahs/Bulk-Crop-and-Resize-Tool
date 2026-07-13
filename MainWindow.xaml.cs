@@ -4,6 +4,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Xceed.Wpf.Toolkit;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement.Window;
 
@@ -15,11 +16,16 @@ namespace ImageCropTool
         {
             InitializeComponent();
             // Set initial states
+
+            outputWidthPx = sourceWidthPx;
+            outputHeightPx = sourceHeightPx; 
+            
             UpdateUnitAvailability();
             UpdateFilenameAvailability();
             UpdateFilenameLayout();
             UpdateSourceFilename();
             UpdateAllTextBoxes();
+
 
             // Attach event handlers
             ActionCrop.Checked += Action_CheckedChanged;
@@ -39,6 +45,10 @@ namespace ImageCropTool
             MargintopBox.ValueChanged += MargintopBox_ValueChanged;
             AspectRatio.Checked += AspectRatio_Checked;
             AspectRatio.Unchecked += AspectRatio_Checked;
+            WidthBox.LostFocus += WidthBox_LostFocus;
+            HeightBox.LostFocus += HeightBox_LostFocus;
+            ResetBtn.Click += ResetBtn_Click;
+
         }
 
 
@@ -65,8 +75,12 @@ namespace ImageCropTool
             string unit = GetCurrentUnit();
             Resources["UnitText"] = unit == "px" ? "px" : unit == "mm" ? "mm" : "%";
             if (AspectRatio.IsChecked == true)
-                AdjustAspectRatio(); // snaps pixel values to ratio
+                AdjustAspectRatio();
             UpdateAllTextBoxes();
+
+            // Force the controls to redraw their content
+            WidthBox.InvalidateVisual();
+            HeightBox.InvalidateVisual();
         }
 
         private void NoOverwrite_CheckedChanged(object sender, RoutedEventArgs e)
@@ -81,6 +95,11 @@ namespace ImageCropTool
             UnitPer.IsEnabled = isResize;
             StackRatio.IsEnabled = isResize;
             MarginsSettings.IsEnabled = !isResize;
+            if (isResize)
+            {
+                marginLeftPx = 0;
+                marginTopPx = 0;
+            }
 
             // If UnitPer is selected but now disabled, switch to Pixels
             if (!isResize && UnitPer.IsChecked == true)
@@ -196,7 +215,7 @@ namespace ImageCropTool
             string path = SrcBox.Text;
 
             // If the text is empty or the placeholder, show "filename"
-            if (string.IsNullOrEmpty(path) || path == "Write/Paste/Browse the source path of a file or folder ------------->")
+            if (string.IsNullOrEmpty(path) || path == "Write/Paste or Browse the source path of a file/folder ------->")
             {
                 NameExample.Text = "filename";
                 return;
@@ -234,19 +253,11 @@ namespace ImageCropTool
         private void SetFilePath(string filePath)
         {
             SrcBox.Text = filePath;
-
             SrcBox.FlowDirection = FlowDirection.RightToLeft;
             SrcBox.TextAlignment = TextAlignment.Right;
             SrcBox.HorizontalContentAlignment = HorizontalAlignment.Right;
 
-            if (System.IO.File.Exists(filePath))
-            {
-                LogTextBox.AppendText($"Selected file: {System.IO.Path.GetFileName(filePath)}\n");
-            }
-            else if (System.IO.Directory.Exists(filePath))
-            {
-                LogTextBox.AppendText($"Selected folder: {filePath}\n");
-            }
+            LoadPath(filePath);
         }
         private void SetOutputPath(string filePath)
         {
@@ -266,7 +277,7 @@ namespace ImageCropTool
             string currentText = SrcBox.Text;
 
             // Check if it's the default placeholder or empty
-            if (string.IsNullOrEmpty(currentText) || currentText == "Write/Paste/Browse the source path of a file or folder ------------->")
+            if (string.IsNullOrEmpty(currentText) || currentText == "Write/Paste or Browse the source path of a file/folder ------->")
             {
                 // Left align for default text
                 SrcBox.FlowDirection = FlowDirection.LeftToRight;
@@ -296,7 +307,7 @@ namespace ImageCropTool
 
         private void SrcBox_GotFocus(object sender, RoutedEventArgs e)
         {
-            if (SrcBox.Text == "Write/Paste/Browse the source path of a file or folder ------------->")
+            if (SrcBox.Text == "Write/Paste or Browse the source path of a file/folder ------->")
             {
                 SrcBox.Text = "";
                 SrcBox.FlowDirection = FlowDirection.LeftToRight;
@@ -307,15 +318,23 @@ namespace ImageCropTool
 
         private void SrcBox_LostFocus(object sender, RoutedEventArgs e)
         {
-            if (string.IsNullOrWhiteSpace(SrcBox.Text))
+            string path = SrcBox.Text;
+            if (string.IsNullOrWhiteSpace(path) || path == "Write/Paste or Browse the source path of a file/folder ------->")
             {
-                SrcBox.Text = "Write/Paste/Browse the source path of a file or folder ------------->";
+                // restore placeholder
+                SrcBox.Text = "Write/Paste or Browse the source path of a file/folder ------->";
                 SrcBox.FlowDirection = FlowDirection.LeftToRight;
                 SrcBox.TextAlignment = TextAlignment.Left;
                 SrcBox.HorizontalContentAlignment = HorizontalAlignment.Left;
+                return;
+            }
+
+            // If it's a valid file or folder, load dimensions
+            if (System.IO.File.Exists(path) || System.IO.Directory.Exists(path))
+            {
+                LoadPath(path);
             }
         }
-
         private void ModePrefix_Checked(object sender, RoutedEventArgs e)
         {
             UpdateFilenameLayout();
@@ -381,10 +400,10 @@ namespace ImageCropTool
 
         // These store the *real* pixel values of the source and current settings.
         // Initially filled with example values – you'll update these when an image is loaded.
-        private int sourceWidthPx = 2000;
-        private int sourceHeightPx = 1000;
-        private int outputWidthPx = 1;
-        private int outputHeightPx = 1;
+        private int sourceWidthPx = 1000;
+        private int sourceHeightPx = 2000;
+        private int outputWidthPx;
+        private int outputHeightPx;
         private int marginLeftPx = 0;
         private int marginTopPx = 0;
         private int _lastDisplayWidth = 1;
@@ -440,43 +459,67 @@ namespace ImageCropTool
                 }
                 else if (unit == "mm")
                 {
-                    double mmPerPixel = MmPerInch / Dpi;
+                    var (rw, rh) = GetReducedRatio();
 
-                    int srcW_mm = (int)Math.Round(sourceWidthPx * mmPerPixel);
-                    int srcH_mm = (int)Math.Round(sourceHeightPx * mmPerPixel);
-                    WidthSourceBox.Text = Math.Max(1, srcW_mm).ToString();
-                    HeightSourceBox.Text = Math.Max(1, srcH_mm).ToString();
-
+                    // ----- Source dimensions -----
                     if (AspectRatio.IsChecked == true)
                     {
-                        var (rw, rh) = GetReducedRatio();
-                        double actual_mmW = outputWidthPx * mmPerPixel;
-                        double actual_mmH = outputHeightPx * mmPerPixel;
+                        double actualSrc_mmW = ConvertPixelsToUnit(sourceWidthPx, "mm");
+                        double actualSrc_mmH = ConvertPixelsToUnit(sourceHeightPx, "mm");
 
-                        int k1 = (int)Math.Round(actual_mmW / rw);
-                        int k2 = (int)Math.Round(actual_mmH / rh);
+                        int k1 = (int)Math.Round(actualSrc_mmW / rw);
+                        int k2 = (int)Math.Round(actualSrc_mmH / rh);
                         if (k1 < 1) k1 = 1;
                         if (k2 < 1) k2 = 1;
 
-                        double err1 = Math.Abs(actual_mmW - k1 * rw) + Math.Abs(actual_mmH - k1 * rh);
-                        double err2 = Math.Abs(actual_mmW - k2 * rw) + Math.Abs(actual_mmH - k2 * rh);
-                        int k = err1 <= err2 ? k1 : k2;
+                        double err1 = Math.Abs(actualSrc_mmW - k1 * rw) + Math.Abs(actualSrc_mmH - k1 * rh);
+                        double err2 = Math.Abs(actualSrc_mmW - k2 * rw) + Math.Abs(actualSrc_mmH - k2 * rh);
+                        int kSrc = err1 <= err2 ? k1 : k2;
 
-                        int outW_mm = k * rw;
-                        int outH_mm = k * rh;
+                        int srcW_mm = kSrc * rw;
+                        int srcH_mm = kSrc * rh;
+                        WidthSourceBox.Text = Math.Max(1, srcW_mm).ToString();
+                        HeightSourceBox.Text = Math.Max(1, srcH_mm).ToString();
+                    }
+                    else
+                    {
+                        int srcW_mm = (int)Math.Round(ConvertPixelsToUnit(sourceWidthPx, "mm"));
+                        int srcH_mm = (int)Math.Round(ConvertPixelsToUnit(sourceHeightPx, "mm"));
+                        WidthSourceBox.Text = Math.Max(1, srcW_mm).ToString();
+                        HeightSourceBox.Text = Math.Max(1, srcH_mm).ToString();
+                    }
+
+                    // ----- Output dimensions -----
+                    if (AspectRatio.IsChecked == true)
+                    {
+                        double actual_mmW = ConvertPixelsToUnit(outputWidthPx, "mm");
+                        double actual_mmH = ConvertPixelsToUnit(outputHeightPx, "mm");
+
+                        int k1_out = (int)Math.Round(actual_mmW / rw);
+                        int k2_out = (int)Math.Round(actual_mmH / rh);
+                        if (k1_out < 1) k1_out = 1;
+                        if (k2_out < 1) k2_out = 1;
+
+                        double err1_out = Math.Abs(actual_mmW - k1_out * rw) + Math.Abs(actual_mmH - k1_out * rh);
+                        double err2_out = Math.Abs(actual_mmW - k2_out * rw) + Math.Abs(actual_mmH - k2_out * rh);
+                        int kOut = err1_out <= err2_out ? k1_out : k2_out;
+
+                        int outW_mm = kOut * rw;
+                        int outH_mm = kOut * rh;
                         WidthBox.Value = outW_mm;
                         HeightBox.Value = outH_mm;
                     }
                     else
                     {
-                        int outW_mm = (int)Math.Round(outputWidthPx * mmPerPixel);
-                        int outH_mm = (int)Math.Round(outputHeightPx * mmPerPixel);
+                        int outW_mm = (int)Math.Round(ConvertPixelsToUnit(outputWidthPx, "mm"));
+                        int outH_mm = (int)Math.Round(ConvertPixelsToUnit(outputHeightPx, "mm"));
                         WidthBox.Value = Math.Max(1, outW_mm);
                         HeightBox.Value = Math.Max(1, outH_mm);
                     }
 
-                    int mL_mm = (int)Math.Round(marginLeftPx * mmPerPixel);
-                    int mT_mm = (int)Math.Round(marginTopPx * mmPerPixel);
+                    // ----- Margins (always independent) -----
+                    int mL_mm = (int)Math.Round(ConvertPixelsToUnit(marginLeftPx, "mm"));
+                    int mT_mm = (int)Math.Round(ConvertPixelsToUnit(marginTopPx, "mm"));
                     MarginLeftBox.Value = mL_mm;
                     MargintopBox.Value = mT_mm;
                 }
@@ -496,17 +539,19 @@ namespace ImageCropTool
                     MarginLeftBox.Value = mL;
                     MargintopBox.Value = mT;
                 }
+
+                // Force text to match value (prevents lost‑focus rollback)
+                WidthBox.Text = WidthBox.Value?.ToString() ?? "0";
+                HeightBox.Text = HeightBox.Value?.ToString() ?? "0";
             }
             finally
             {
                 _updatingUI = false;
-                // Store current displayed values for direction detection
                 _lastDisplayWidth = WidthBox.Value ?? 0;
                 _lastDisplayHeight = HeightBox.Value ?? 0;
+                UpdateCropOverlay();
             }
         }
-
-
         private void WidthBox_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             if (_updatingUI || !IsLoaded) return;
@@ -516,17 +561,15 @@ namespace ImageCropTool
                 string unit = GetCurrentUnit();
                 int newDisplayValue = WidthBox.Value ?? 0;
 
-                // --- Percentage mode: keep both percentages equal (uniform scaling) ---
+                // Percentage mode: both percentages are equal (uniform scaling)
                 if (unit == "%")
                 {
                     double newWidthPercent = newDisplayValue;
-                    // The height percentage must equal the width percentage (uniform scaling)
-                    double newHeightPercent = newWidthPercent; // because aspect ratio locked
+                    double newHeightPercent = newWidthPercent;
 
                     int newHeightDisplay = (int)Math.Round(newHeightPercent);
                     if (newHeightDisplay < 1) newHeightDisplay = 1;
 
-                    // Compute pixel values from percentages
                     outputWidthPx = (int)Math.Round(newWidthPercent / 100.0 * sourceWidthPx);
                     outputHeightPx = (int)Math.Round(newHeightPercent / 100.0 * sourceHeightPx);
                     if (outputWidthPx < 1) outputWidthPx = 1;
@@ -536,27 +579,37 @@ namespace ImageCropTool
                     return;
                 }
 
-                // --- For pixels and millimeters: use direction-aware rounding ---
-                int targetPixel = ConvertUnitToPixels(newDisplayValue, unit, false); // convert to pixels (no clamp)
                 var (rw, rh) = GetReducedRatio();
-                int oldDisplayValue = _lastDisplayWidth; // previous displayed value in current unit
+                double rwUnit = ConvertPixelsToUnit(rw, unit); // size of one reduced unit in current unit
+
+                int oldDisplayValue = _lastDisplayWidth;
+                bool increasing = newDisplayValue > oldDisplayValue;
+                bool decreasing = newDisplayValue < oldDisplayValue;
 
                 int k;
-                if (newDisplayValue > oldDisplayValue)
+                if (increasing)
                 {
-                    k = (int)Math.Ceiling((double)targetPixel / rw);
+                    // Find the smallest k such that rounded(k * rwUnit) >= newDisplayValue
+                    k = 1;
+                    while ((int)Math.Round(k * rwUnit) < newDisplayValue)
+                        k++;
                 }
-                else if (newDisplayValue < oldDisplayValue)
+                else if (decreasing)
                 {
-                    k = (int)Math.Floor((double)targetPixel / rw);
+                    // Find the largest k such that rounded(k * rwUnit) <= newDisplayValue
+                    // Start from a reasonable high estimate (based on the entered value)
+                    k = (int)Math.Floor((newDisplayValue + 0.5) / rwUnit);
+                    if (k < 1) k = 1;
+                    // Adjust downward if necessary
+                    while ((int)Math.Round(k * rwUnit) > newDisplayValue)
+                        k--;
                     if (k < 1) k = 1;
                 }
-                else
+                else // no change – keep current
                 {
                     k = (int)Math.Round((double)outputWidthPx / rw);
+                    if (k < 1) k = 1;
                 }
-
-                if (k < 1) k = 1;
 
                 outputWidthPx = k * rw;
                 outputHeightPx = k * rh;
@@ -580,7 +633,7 @@ namespace ImageCropTool
                 if (unit == "%")
                 {
                     double newHeightPercent = newDisplayValue;
-                    double newWidthPercent = newHeightPercent; // uniform scaling
+                    double newWidthPercent = newHeightPercent;
                     int newWidthDisplay = (int)Math.Round(newWidthPercent);
                     if (newWidthDisplay < 1) newWidthDisplay = 1;
 
@@ -593,26 +646,33 @@ namespace ImageCropTool
                     return;
                 }
 
-                int targetPixel = ConvertUnitToPixels(newDisplayValue, unit, false);
                 var (rw, rh) = GetReducedRatio();
+                double rhUnit = ConvertPixelsToUnit(rh, unit);
+
                 int oldDisplayValue = _lastDisplayHeight;
+                bool increasing = newDisplayValue > oldDisplayValue;
+                bool decreasing = newDisplayValue < oldDisplayValue;
 
                 int k;
-                if (newDisplayValue > oldDisplayValue)
+                if (increasing)
                 {
-                    k = (int)Math.Ceiling((double)targetPixel / rh);
+                    k = 1;
+                    while ((int)Math.Round(k * rhUnit) < newDisplayValue)
+                        k++;
                 }
-                else if (newDisplayValue < oldDisplayValue)
+                else if (decreasing)
                 {
-                    k = (int)Math.Floor((double)targetPixel / rh);
+                    k = (int)Math.Floor((newDisplayValue + 0.5) / rhUnit);
+                    if (k < 1) k = 1;
+                    while ((int)Math.Round(k * rhUnit) > newDisplayValue)
+                        k--;
                     if (k < 1) k = 1;
                 }
                 else
                 {
                     k = (int)Math.Round((double)outputHeightPx / rh);
+                    if (k < 1) k = 1;
                 }
-
-                if (k < 1) k = 1;
 
                 outputWidthPx = k * rw;
                 outputHeightPx = k * rh;
@@ -623,7 +683,7 @@ namespace ImageCropTool
                 UpdatePixelFromBox(HeightBox, ref outputHeightPx, sourceHeightPx, true);
             }
         }
-        
+
         private void MarginLeftBox_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             if (_updatingUI || !IsLoaded) return;
@@ -735,6 +795,151 @@ namespace ImageCropTool
             else // no change, keep current
                 k = (int)Math.Round((double)currentOutputDim / reducedDim);
             return Math.Max(1, k);
+        }
+
+        private void WidthBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (!(AspectRatio.IsChecked == true)) return;
+            if (_updatingUI) return;
+
+            string unit = GetCurrentUnit();
+            int currentDisplay = WidthBox.Value ?? 0;
+            int expectedDisplay = (int)Math.Round(ConvertPixelsToUnit(outputWidthPx, unit));
+
+            if (currentDisplay != expectedDisplay)
+            {
+                // Force the correct value and refresh the UI
+                _updatingUI = true;
+                WidthBox.Value = expectedDisplay;
+                _updatingUI = false;
+                // Calling UpdateAllTextBoxes will also set the HeightBox correctly and sync Text
+                UpdateAllTextBoxes();
+            }
+        }
+
+        private void HeightBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (!(AspectRatio.IsChecked == true)) return;
+            if (_updatingUI) return;
+
+            string unit = GetCurrentUnit();
+            int currentDisplay = HeightBox.Value ?? 0;
+            int expectedDisplay = (int)Math.Round(ConvertPixelsToUnit(outputHeightPx, unit));
+
+            if (currentDisplay != expectedDisplay)
+            {
+                _updatingUI = true;
+                HeightBox.Value = expectedDisplay;
+                _updatingUI = false;
+                UpdateAllTextBoxes();
+            }
+        }
+
+        private (int width, int height)? GetImageDimensions(string filePath)
+        {
+            try
+            {
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.UriSource = new Uri(filePath);
+                bitmap.DecodePixelWidth = 0; // forces full resolution
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.EndInit();
+                bitmap.Freeze(); // optional, for better performance
+
+                return (bitmap.PixelWidth, bitmap.PixelHeight);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private void LoadPath(string path)
+        {
+            if (System.IO.File.Exists(path))
+            {
+                LogTextBox.AppendText($"Selected file: {System.IO.Path.GetFileName(path)}\n");
+                var dims = GetImageDimensions(path);
+                if (dims.HasValue)
+                {
+                    SetSourceDimensions(dims.Value.width, dims.Value.height);
+                    LogTextBox.AppendText($"Loaded dimensions: {dims.Value.width} × {dims.Value.height} px\n");
+                }
+                else
+                {
+                    LogTextBox.AppendText("Warning: Could not read image dimensions.\n");
+                }
+            }
+            else if (System.IO.Directory.Exists(path))
+            {
+                LogTextBox.AppendText($"Selected folder: {path}\n");
+                // Find first image file
+                string[] extensions = { "*.jpg", "*.jpeg", "*.png", "*.bmp", "*.gif", "*.tiff" };
+                bool found = false;
+                foreach (var ext in extensions)
+                {
+                    var files = System.IO.Directory.GetFiles(path, ext, System.IO.SearchOption.TopDirectoryOnly);
+                    if (files.Length > 0)
+                    {
+                        var dims = GetImageDimensions(files[0]);
+                        if (dims.HasValue)
+                        {
+                            SetSourceDimensions(dims.Value.width, dims.Value.height);
+                            LogTextBox.AppendText($"Using first image: {System.IO.Path.GetFileName(files[0])} ({dims.Value.width} × {dims.Value.height} px)\n");
+                        }
+                        else
+                        {
+                            LogTextBox.AppendText($"Warning: Could not read dimensions from {System.IO.Path.GetFileName(files[0])}\n");
+                        }
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found)
+                    LogTextBox.AppendText("No image files found in the folder.\n");
+            }
+            else
+            {
+                LogTextBox.AppendText($"Path not found: {path}\n");
+            }
+        }
+
+        private void UpdateCropOverlay()
+        {
+            // Set the overlay dimensions and position from the current pixel values
+            CropOverlay.Width = Math.Max(1, outputWidthPx);
+            CropOverlay.Height = Math.Max(1, outputHeightPx);
+            Canvas.SetLeft(CropOverlay, marginLeftPx);
+            Canvas.SetTop(CropOverlay, marginTopPx);
+        }
+
+        private void ResetBtn_Click(object sender, RoutedEventArgs e)
+        {
+            // Reset output dimensions to the current source dimensions
+            outputWidthPx = sourceWidthPx;
+            outputHeightPx = sourceHeightPx;
+
+            // Reset margins to zero
+            marginLeftPx = 0;
+            marginTopPx = 0;
+
+            // Reset UI controls
+            AspectRatio.IsChecked = false;
+            ActionCrop.IsChecked = true;
+            UnitPixels.IsChecked = true;
+
+            // Reset filename settings
+            userCustomText = null;          // clear any custom text
+            ModePrefix.IsChecked = true;    // default to Prefix
+            NoOverwriteChk.IsChecked = true;
+
+            // Force UI refresh (this also updates the crop overlay)
+            UpdateAllTextBoxes();
+            UpdateFilenameLayout();
+
+            // Log the action
+            LogTextBox.AppendText("Settings reset to default.\n");
         }
     }
 }
