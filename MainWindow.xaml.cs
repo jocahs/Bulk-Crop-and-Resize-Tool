@@ -37,6 +37,8 @@ namespace ImageCropTool
             HeightBox.ValueChanged += HeightBox_ValueChanged;
             MarginLeftBox.ValueChanged += MarginLeftBox_ValueChanged;
             MargintopBox.ValueChanged += MargintopBox_ValueChanged;
+            AspectRatio.Checked += AspectRatio_Checked;
+            AspectRatio.Unchecked += AspectRatio_Checked;
         }
 
 
@@ -44,15 +46,13 @@ namespace ImageCropTool
         {
             if (ActionResize.IsChecked == true)
             {
-                // Set output size equal to source (100%)
-                outputWidthPx = sourceWidthPx;
-                outputHeightPx = sourceHeightPx;
                 // Margins are irrelevant in resize mode; set to 0
                 marginLeftPx = 0;
                 marginTopPx = 0;
-
-                // Switch to Percentage unit – this will fire Unit_CheckedChanged and update all boxes
-                UnitPer.IsChecked = true;
+            }
+            else
+            {
+                AspectRatio.IsChecked = false; // Disable aspect ratio lock in crop mode
             }
             // If Crop is selected, we do not change the pixel values here.
             // UnitPer will be disabled by UpdateUnitAvailability().
@@ -78,7 +78,6 @@ namespace ImageCropTool
             bool isResize = ActionResize.IsChecked == true;
             UnitPer.IsEnabled = isResize;
             StackRatio.IsEnabled = isResize;
-            AspectRatio.IsChecked = isResize;
             MarginsSettings.IsEnabled = !isResize;
 
             // If UnitPer is selected but now disabled, switch to Pixels
@@ -382,8 +381,8 @@ namespace ImageCropTool
         // Initially filled with example values – you'll update these when an image is loaded.
         private int sourceWidthPx = 2000;
         private int sourceHeightPx = 1000;
-        private int outputWidthPx = 1024;
-        private int outputHeightPx = 768;
+        private int outputWidthPx = 1;
+        private int outputHeightPx = 1;
         private int marginLeftPx = 0;
         private int marginTopPx = 0;
 
@@ -402,16 +401,17 @@ namespace ImageCropTool
             return pixels; // fallback
         }
 
-        private int ConvertUnitToPixels(double value, string unit)
+        private int ConvertUnitToPixels(double value, string unit, bool clampToMin = true)
         {
-            if (unit == "px") return (int)Math.Round(value);
-            if (unit == "mm") return (int)Math.Round(value / MmPerInch * Dpi);
-            return (int)value;
-        }
+            int result;
+            if (unit == "px")
+                result = (int)Math.Round(value);
+            else if (unit == "mm")
+                result = (int)Math.Round(value / MmPerInch * Dpi);
+            else
+                result = (int)Math.Round(value);
 
-        private string FormatValue(double value)
-        {
-            return ((int)Math.Round(value)).ToString();
+            return clampToMin ? Math.Max(1, result) : result;
         }
 
         private void UpdateAllTextBoxes()
@@ -427,9 +427,8 @@ namespace ImageCropTool
                     WidthSourceBox.Text = "100";
                     HeightSourceBox.Text = "100";
 
-                    double percentW = (double)outputWidthPx / sourceWidthPx * 100;
-                    double percentH = (double)outputHeightPx / sourceHeightPx * 100;
-                    // Round to nearest integer
+                    double percentW = Math.Max(1, (double)outputWidthPx / sourceWidthPx * 100);
+                    double percentH = Math.Max(1, (double)outputHeightPx / sourceHeightPx * 100);
                     WidthBox.Value = (int)Math.Round(percentW);
                     HeightBox.Value = (int)Math.Round(percentH);
                     // Margins are always 0 in percentage mode
@@ -439,10 +438,12 @@ namespace ImageCropTool
                 else
                 {
                     // Convert from stored pixel values to the current unit, then round to integer
-                    int srcW = (int)Math.Round(ConvertPixelsToUnit(sourceWidthPx, unit));
-                    int srcH = (int)Math.Round(ConvertPixelsToUnit(sourceHeightPx, unit));
-                    int outW = (int)Math.Round(ConvertPixelsToUnit(outputWidthPx, unit));
-                    int outH = (int)Math.Round(ConvertPixelsToUnit(outputHeightPx, unit));
+                    int srcW = Math.Max(1, (int)Math.Round(ConvertPixelsToUnit(sourceWidthPx, unit)));
+                    int srcH = Math.Max(1, (int)Math.Round(ConvertPixelsToUnit(sourceHeightPx, unit)));
+                    int outW = Math.Max(1, (int)Math.Round(ConvertPixelsToUnit(outputWidthPx, unit)));
+                    int outH = Math.Max(1, (int)Math.Round(ConvertPixelsToUnit(outputHeightPx, unit)));
+
+                    // For margins, do NOT clamp – keep 0 if the pixel value is 0
                     int mL = (int)Math.Round(ConvertPixelsToUnit(marginLeftPx, unit));
                     int mT = (int)Math.Round(ConvertPixelsToUnit(marginTopPx, unit));
 
@@ -463,46 +464,43 @@ namespace ImageCropTool
         private void WidthBox_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             if (_updatingUI || !IsLoaded) return;
-            UpdatePixelFromBox(WidthBox, ref outputWidthPx, sourceWidthPx);
+            UpdatePixelFromBox(WidthBox, ref outputWidthPx, sourceWidthPx, true);
         }
 
         private void HeightBox_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             if (_updatingUI || !IsLoaded) return;
-            UpdatePixelFromBox(HeightBox, ref outputHeightPx, sourceHeightPx);
+            UpdatePixelFromBox(HeightBox, ref outputHeightPx, sourceHeightPx, true);
         }
 
         private void MarginLeftBox_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             if (_updatingUI || !IsLoaded) return;
-            UpdatePixelFromBox(MarginLeftBox, ref marginLeftPx, sourceWidthPx);
+            UpdatePixelFromBox(MarginLeftBox, ref marginLeftPx, sourceWidthPx, false);
         }
 
         private void MargintopBox_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             if (_updatingUI || !IsLoaded) return;
-            UpdatePixelFromBox(MargintopBox, ref marginTopPx, sourceHeightPx);
+            UpdatePixelFromBox(MargintopBox, ref marginTopPx, sourceHeightPx, false);
         }
 
-        private void UpdatePixelFromBox(IntegerUpDown box, ref int pixelField, int sourceDimensionPx)
+        private void UpdatePixelFromBox(IntegerUpDown box, ref int pixelField, int sourceDimensionPx, bool clampToMin = true)
         {
             string unit = GetCurrentUnit();
-            double displayValue = box.Value ?? 0; // IntegerUpDown.Value is double?
+            double displayValue = box.Value ?? 0;
 
             if (unit == "%")
             {
-                // Displayed value is a percentage of the source dimension
-                double percent = displayValue;
-                pixelField = (int)Math.Round(percent / 100.0 * sourceDimensionPx);
+                pixelField = (int)Math.Round(displayValue / 100.0 * sourceDimensionPx);
+                // For percentage, also clamp if needed? Usually percentage of source can be 0.
+                if (clampToMin && pixelField < 1) pixelField = 1;
             }
             else
             {
-                // Pixel or Millimeter – convert to pixels
-                pixelField = ConvertUnitToPixels(displayValue, unit);
+                pixelField = ConvertUnitToPixels(displayValue, unit, clampToMin);
             }
 
-            // After updating the field, refresh all text boxes to show the new value
-            // in the current unit (avoids rounding inconsistencies)
             UpdateAllTextBoxes();
         }
 
