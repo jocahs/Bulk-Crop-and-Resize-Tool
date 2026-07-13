@@ -64,6 +64,8 @@ namespace ImageCropTool
         {
             string unit = GetCurrentUnit();
             Resources["UnitText"] = unit == "px" ? "px" : unit == "mm" ? "mm" : "%";
+            if (AspectRatio.IsChecked == true)
+                AdjustAspectRatio(); // snaps pixel values to ratio
             UpdateAllTextBoxes();
         }
 
@@ -385,6 +387,8 @@ namespace ImageCropTool
         private int outputHeightPx = 1;
         private int marginLeftPx = 0;
         private int marginTopPx = 0;
+        private int _lastDisplayWidth = 1;
+        private int _lastDisplayHeight = 1;
 
         private string GetCurrentUnit()
         {
@@ -431,21 +435,59 @@ namespace ImageCropTool
                     double percentH = Math.Max(1, (double)outputHeightPx / sourceHeightPx * 100);
                     WidthBox.Value = (int)Math.Round(percentW);
                     HeightBox.Value = (int)Math.Round(percentH);
-                    // Margins are always 0 in percentage mode
                     MarginLeftBox.Value = 0;
                     MargintopBox.Value = 0;
                 }
-                else
+                else if (unit == "mm")
                 {
-                    // Convert from stored pixel values to the current unit, then round to integer
-                    int srcW = Math.Max(1, (int)Math.Round(ConvertPixelsToUnit(sourceWidthPx, unit)));
-                    int srcH = Math.Max(1, (int)Math.Round(ConvertPixelsToUnit(sourceHeightPx, unit)));
-                    int outW = Math.Max(1, (int)Math.Round(ConvertPixelsToUnit(outputWidthPx, unit)));
-                    int outH = Math.Max(1, (int)Math.Round(ConvertPixelsToUnit(outputHeightPx, unit)));
+                    double mmPerPixel = MmPerInch / Dpi;
 
-                    // For margins, do NOT clamp – keep 0 if the pixel value is 0
-                    int mL = (int)Math.Round(ConvertPixelsToUnit(marginLeftPx, unit));
-                    int mT = (int)Math.Round(ConvertPixelsToUnit(marginTopPx, unit));
+                    int srcW_mm = (int)Math.Round(sourceWidthPx * mmPerPixel);
+                    int srcH_mm = (int)Math.Round(sourceHeightPx * mmPerPixel);
+                    WidthSourceBox.Text = Math.Max(1, srcW_mm).ToString();
+                    HeightSourceBox.Text = Math.Max(1, srcH_mm).ToString();
+
+                    if (AspectRatio.IsChecked == true)
+                    {
+                        var (rw, rh) = GetReducedRatio();
+                        double actual_mmW = outputWidthPx * mmPerPixel;
+                        double actual_mmH = outputHeightPx * mmPerPixel;
+
+                        int k1 = (int)Math.Round(actual_mmW / rw);
+                        int k2 = (int)Math.Round(actual_mmH / rh);
+                        if (k1 < 1) k1 = 1;
+                        if (k2 < 1) k2 = 1;
+
+                        double err1 = Math.Abs(actual_mmW - k1 * rw) + Math.Abs(actual_mmH - k1 * rh);
+                        double err2 = Math.Abs(actual_mmW - k2 * rw) + Math.Abs(actual_mmH - k2 * rh);
+                        int k = err1 <= err2 ? k1 : k2;
+
+                        int outW_mm = k * rw;
+                        int outH_mm = k * rh;
+                        WidthBox.Value = outW_mm;
+                        HeightBox.Value = outH_mm;
+                    }
+                    else
+                    {
+                        int outW_mm = (int)Math.Round(outputWidthPx * mmPerPixel);
+                        int outH_mm = (int)Math.Round(outputHeightPx * mmPerPixel);
+                        WidthBox.Value = Math.Max(1, outW_mm);
+                        HeightBox.Value = Math.Max(1, outH_mm);
+                    }
+
+                    int mL_mm = (int)Math.Round(marginLeftPx * mmPerPixel);
+                    int mT_mm = (int)Math.Round(marginTopPx * mmPerPixel);
+                    MarginLeftBox.Value = mL_mm;
+                    MargintopBox.Value = mT_mm;
+                }
+                else // pixels
+                {
+                    int srcW = Math.Max(1, (int)Math.Round(ConvertPixelsToUnit(sourceWidthPx, "px")));
+                    int srcH = Math.Max(1, (int)Math.Round(ConvertPixelsToUnit(sourceHeightPx, "px")));
+                    int outW = Math.Max(1, (int)Math.Round(ConvertPixelsToUnit(outputWidthPx, "px")));
+                    int outH = Math.Max(1, (int)Math.Round(ConvertPixelsToUnit(outputHeightPx, "px")));
+                    int mL = (int)Math.Round(ConvertPixelsToUnit(marginLeftPx, "px"));
+                    int mT = (int)Math.Round(ConvertPixelsToUnit(marginTopPx, "px"));
 
                     WidthSourceBox.Text = srcW.ToString();
                     HeightSourceBox.Text = srcH.ToString();
@@ -458,21 +500,130 @@ namespace ImageCropTool
             finally
             {
                 _updatingUI = false;
+                // Store current displayed values for direction detection
+                _lastDisplayWidth = WidthBox.Value ?? 0;
+                _lastDisplayHeight = HeightBox.Value ?? 0;
             }
         }
+
 
         private void WidthBox_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             if (_updatingUI || !IsLoaded) return;
-            UpdatePixelFromBox(WidthBox, ref outputWidthPx, sourceWidthPx, true);
+
+            if (AspectRatio.IsChecked == true)
+            {
+                string unit = GetCurrentUnit();
+                int newDisplayValue = WidthBox.Value ?? 0;
+
+                // --- Percentage mode: keep both percentages equal (uniform scaling) ---
+                if (unit == "%")
+                {
+                    double newWidthPercent = newDisplayValue;
+                    // The height percentage must equal the width percentage (uniform scaling)
+                    double newHeightPercent = newWidthPercent; // because aspect ratio locked
+
+                    int newHeightDisplay = (int)Math.Round(newHeightPercent);
+                    if (newHeightDisplay < 1) newHeightDisplay = 1;
+
+                    // Compute pixel values from percentages
+                    outputWidthPx = (int)Math.Round(newWidthPercent / 100.0 * sourceWidthPx);
+                    outputHeightPx = (int)Math.Round(newHeightPercent / 100.0 * sourceHeightPx);
+                    if (outputWidthPx < 1) outputWidthPx = 1;
+                    if (outputHeightPx < 1) outputHeightPx = 1;
+
+                    UpdateAllTextBoxes();
+                    return;
+                }
+
+                // --- For pixels and millimeters: use direction-aware rounding ---
+                int targetPixel = ConvertUnitToPixels(newDisplayValue, unit, false); // convert to pixels (no clamp)
+                var (rw, rh) = GetReducedRatio();
+                int oldDisplayValue = _lastDisplayWidth; // previous displayed value in current unit
+
+                int k;
+                if (newDisplayValue > oldDisplayValue)
+                {
+                    k = (int)Math.Ceiling((double)targetPixel / rw);
+                }
+                else if (newDisplayValue < oldDisplayValue)
+                {
+                    k = (int)Math.Floor((double)targetPixel / rw);
+                    if (k < 1) k = 1;
+                }
+                else
+                {
+                    k = (int)Math.Round((double)outputWidthPx / rw);
+                }
+
+                if (k < 1) k = 1;
+
+                outputWidthPx = k * rw;
+                outputHeightPx = k * rh;
+                UpdateAllTextBoxes();
+            }
+            else
+            {
+                UpdatePixelFromBox(WidthBox, ref outputWidthPx, sourceWidthPx, true);
+            }
         }
 
         private void HeightBox_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             if (_updatingUI || !IsLoaded) return;
-            UpdatePixelFromBox(HeightBox, ref outputHeightPx, sourceHeightPx, true);
-        }
 
+            if (AspectRatio.IsChecked == true)
+            {
+                string unit = GetCurrentUnit();
+                int newDisplayValue = HeightBox.Value ?? 0;
+
+                if (unit == "%")
+                {
+                    double newHeightPercent = newDisplayValue;
+                    double newWidthPercent = newHeightPercent; // uniform scaling
+                    int newWidthDisplay = (int)Math.Round(newWidthPercent);
+                    if (newWidthDisplay < 1) newWidthDisplay = 1;
+
+                    outputWidthPx = (int)Math.Round(newWidthPercent / 100.0 * sourceWidthPx);
+                    outputHeightPx = (int)Math.Round(newHeightPercent / 100.0 * sourceHeightPx);
+                    if (outputWidthPx < 1) outputWidthPx = 1;
+                    if (outputHeightPx < 1) outputHeightPx = 1;
+
+                    UpdateAllTextBoxes();
+                    return;
+                }
+
+                int targetPixel = ConvertUnitToPixels(newDisplayValue, unit, false);
+                var (rw, rh) = GetReducedRatio();
+                int oldDisplayValue = _lastDisplayHeight;
+
+                int k;
+                if (newDisplayValue > oldDisplayValue)
+                {
+                    k = (int)Math.Ceiling((double)targetPixel / rh);
+                }
+                else if (newDisplayValue < oldDisplayValue)
+                {
+                    k = (int)Math.Floor((double)targetPixel / rh);
+                    if (k < 1) k = 1;
+                }
+                else
+                {
+                    k = (int)Math.Round((double)outputHeightPx / rh);
+                }
+
+                if (k < 1) k = 1;
+
+                outputWidthPx = k * rw;
+                outputHeightPx = k * rh;
+                UpdateAllTextBoxes();
+            }
+            else
+            {
+                UpdatePixelFromBox(HeightBox, ref outputHeightPx, sourceHeightPx, true);
+            }
+        }
+        
         private void MarginLeftBox_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             if (_updatingUI || !IsLoaded) return;
@@ -506,6 +657,84 @@ namespace ImageCropTool
 
         private bool _updatingUI = false;
 
+        private int GCD(int a, int b)
+        {
+            while (b != 0)
+            {
+                int temp = b;
+                b = a % b;
+                a = temp;
+            }
+            return a;
+        }
 
+        private (int rw, int rh) GetReducedRatio()
+        {
+            int g = GCD(sourceWidthPx, sourceHeightPx);
+            return (sourceWidthPx / g, sourceHeightPx / g);
+        }
+
+        private void AdjustAspectRatio()
+        {
+            if (!AspectRatio.IsChecked == true) return;
+            if (sourceWidthPx <= 0 || sourceHeightPx <= 0) return;
+
+            var (rw, rh) = GetReducedRatio();
+            int k;
+
+            if (sourceWidthPx <= sourceHeightPx)
+            {
+                // Keep width – compute k from current outputWidthPx
+                k = (int)Math.Round((double)outputWidthPx / rw);
+                if (k < 1) k = 1;
+            }
+            else
+            {
+                // Keep height – compute k from current outputHeightPx
+                k = (int)Math.Round((double)outputHeightPx / rh);
+                if (k < 1) k = 1;
+            }
+
+            outputWidthPx = k * rw;
+            outputHeightPx = k * rh;
+            UpdateAllTextBoxes();
+        }
+
+        private void AspectRatio_Checked(object sender, RoutedEventArgs e)
+        {
+            if (AspectRatio.IsChecked == true)
+            {
+                AdjustAspectRatio();
+            }
+            // If unchecked, do nothing – allow free editing
+        }
+
+        public void SetSourceDimensions(int widthPx, int heightPx)
+        {
+            sourceWidthPx = widthPx;
+            sourceHeightPx = heightPx;
+            if (AspectRatio.IsChecked == true)
+                AdjustAspectRatio();
+            else
+                UpdateAllTextBoxes();
+        }
+
+        private int ComputeKWithDirection(int targetPx, int reducedDim, int currentPx, int currentOutputDim)
+        {
+            // targetPx: the pixel value the user typed (converted)
+            // reducedDim: the reduced ratio dimension (rw or rh)
+            // currentPx: the previous pixel value for the changed dimension
+            // currentOutputDim: the current output dimension (width or height) before change
+
+            double kDouble = (double)targetPx / reducedDim;
+            int k;
+            if (targetPx > currentPx) // user increased the value
+                k = (int)Math.Ceiling(kDouble);
+            else if (targetPx < currentPx) // user decreased the value
+                k = (int)Math.Floor(kDouble);
+            else // no change, keep current
+                k = (int)Math.Round((double)currentOutputDim / reducedDim);
+            return Math.Max(1, k);
+        }
     }
 }
