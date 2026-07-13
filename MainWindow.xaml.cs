@@ -18,7 +18,8 @@ namespace ImageCropTool
             // Set initial states
 
             outputWidthPx = sourceWidthPx;
-            outputHeightPx = sourceHeightPx; 
+            outputHeightPx = sourceHeightPx;
+            UpdateMaxValues();
             
             UpdateUnitAvailability();
             UpdateFilenameAvailability();
@@ -48,7 +49,9 @@ namespace ImageCropTool
             WidthBox.LostFocus += WidthBox_LostFocus;
             HeightBox.LostFocus += HeightBox_LostFocus;
             ResetBtn.Click += ResetBtn_Click;
-
+            PreviewImage.SizeChanged += (s, e) => UpdateCropOverlay();
+            PreviewImage.Loaded += (s, e) => UpdateCropOverlay();
+            PreviewImage.Loaded += (s, e) => UpdateCropOverlay();
         }
 
 
@@ -56,17 +59,19 @@ namespace ImageCropTool
         {
             if (ActionResize.IsChecked == true)
             {
-                // Margins are irrelevant in resize mode; set to 0
                 marginLeftPx = 0;
                 marginTopPx = 0;
             }
             else
             {
-                AspectRatio.IsChecked = false; // Disable aspect ratio lock in crop mode
+                AspectRatio.IsChecked = false;
+                // When switching to Crop, ensure output doesn't exceed source
+                if (outputWidthPx > sourceWidthPx) outputWidthPx = sourceWidthPx;
+                if (outputHeightPx > sourceHeightPx) outputHeightPx = sourceHeightPx;
+                UpdateAllTextBoxes(); // refresh UI after clamping
             }
-            // If Crop is selected, we do not change the pixel values here.
-            // UnitPer will be disabled by UpdateUnitAvailability().
             UpdateUnitAvailability();
+            UpdateMaxValues();
             UpdateFilenameLayout();
         }
 
@@ -74,11 +79,11 @@ namespace ImageCropTool
         {
             string unit = GetCurrentUnit();
             Resources["UnitText"] = unit == "px" ? "px" : unit == "mm" ? "mm" : "%";
+            UpdateMaxValues();
             if (AspectRatio.IsChecked == true)
                 AdjustAspectRatio();
             UpdateAllTextBoxes();
 
-            // Force the controls to redraw their content
             WidthBox.InvalidateVisual();
             HeightBox.InvalidateVisual();
         }
@@ -95,6 +100,7 @@ namespace ImageCropTool
             UnitPer.IsEnabled = isResize;
             StackRatio.IsEnabled = isResize;
             MarginsSettings.IsEnabled = !isResize;
+            CropOverlay.Visibility = isResize ? Visibility.Collapsed : Visibility.Visible;
             if (isResize)
             {
                 marginLeftPx = 0;
@@ -269,7 +275,7 @@ namespace ImageCropTool
 
            if (System.IO.Directory.Exists(filePath))
             {
-                LogTextBox.AppendText($"Output folder: {filePath}\n");
+                AppendLog($"Output folder: {filePath}\n");
             }
         }
         private void SrcBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -773,6 +779,15 @@ namespace ImageCropTool
         {
             sourceWidthPx = widthPx;
             sourceHeightPx = heightPx;
+            UpdateMaxValues();
+
+            // Clamp output to source if Crop is active
+            if (ActionCrop.IsChecked == true)
+            {
+                if (outputWidthPx > sourceWidthPx) outputWidthPx = sourceWidthPx;
+                if (outputHeightPx > sourceHeightPx) outputHeightPx = sourceHeightPx;
+            }
+
             if (AspectRatio.IsChecked == true)
                 AdjustAspectRatio();
             else
@@ -859,21 +874,21 @@ namespace ImageCropTool
         {
             if (System.IO.File.Exists(path))
             {
-                LogTextBox.AppendText($"Selected file: {System.IO.Path.GetFileName(path)}\n");
+                AppendLog($"Selected file: {System.IO.Path.GetFileName(path)}\n");
                 var dims = GetImageDimensions(path);
                 if (dims.HasValue)
                 {
                     SetSourceDimensions(dims.Value.width, dims.Value.height);
-                    LogTextBox.AppendText($"Loaded dimensions: {dims.Value.width} × {dims.Value.height} px\n");
+                    AppendLog($"Loaded dimensions: {dims.Value.width} × {dims.Value.height} px\n");
                 }
                 else
                 {
-                    LogTextBox.AppendText("Warning: Could not read image dimensions.\n");
+                    AppendLog("Warning: Could not read image dimensions.\n");
                 }
             }
             else if (System.IO.Directory.Exists(path))
             {
-                LogTextBox.AppendText($"Selected folder: {path}\n");
+                AppendLog($"Selected folder: {path}\n");
                 // Find first image file
                 string[] extensions = { "*.jpg", "*.jpeg", "*.png", "*.bmp", "*.gif", "*.tiff" };
                 bool found = false;
@@ -886,32 +901,75 @@ namespace ImageCropTool
                         if (dims.HasValue)
                         {
                             SetSourceDimensions(dims.Value.width, dims.Value.height);
-                            LogTextBox.AppendText($"Using first image: {System.IO.Path.GetFileName(files[0])} ({dims.Value.width} × {dims.Value.height} px)\n");
+                            AppendLog($"Using first image: {System.IO.Path.GetFileName(files[0])} ({dims.Value.width} × {dims.Value.height} px)\n");
                         }
                         else
                         {
-                            LogTextBox.AppendText($"Warning: Could not read dimensions from {System.IO.Path.GetFileName(files[0])}\n");
+                            AppendLog($"Warning: Could not read dimensions from {System.IO.Path.GetFileName(files[0])}\n");
                         }
                         found = true;
                         break;
                     }
                 }
                 if (!found)
-                    LogTextBox.AppendText("No image files found in the folder.\n");
+                    AppendLog("No image files found in the folder.\n");
             }
             else
             {
-                LogTextBox.AppendText($"Path not found: {path}\n");
+                AppendLog($"Path not found: {path}\n");
             }
         }
 
         private void UpdateCropOverlay()
         {
-            // Set the overlay dimensions and position from the current pixel values
-            CropOverlay.Width = Math.Max(1, outputWidthPx);
-            CropOverlay.Height = Math.Max(1, outputHeightPx);
-            Canvas.SetLeft(CropOverlay, marginLeftPx);
-            Canvas.SetTop(CropOverlay, marginTopPx);
+            if (sourceWidthPx <= 0 || sourceHeightPx <= 0) return;
+
+            double imgWidth = PreviewImage.ActualWidth;
+            double imgHeight = PreviewImage.ActualHeight;
+
+            double scaleX, scaleY, scale;
+            double offsetX = 0, offsetY = 0;
+
+            if (imgWidth > 0 && imgHeight > 0)
+            {
+                // Image is loaded – use its actual size
+                scaleX = imgWidth / sourceWidthPx;
+                scaleY = imgHeight / sourceHeightPx;
+                scale = Math.Min(scaleX, scaleY);
+                // Image is centered, so offset is 0 because the image's top-left is (0,0) in the Canvas
+                // (the Canvas contains only the image, so it's at (0,0))
+            }
+            else
+            {
+                // No image loaded – fall back to Canvas size and default source dimensions
+                double canvasWidth = PreviewCanvas.ActualWidth;
+                double canvasHeight = PreviewCanvas.ActualHeight;
+                if (canvasWidth <= 0 || canvasHeight <= 0)
+                {
+                    // If Canvas size is also zero (e.g., not yet rendered), just use scale=1 and no offset
+                    scale = 1.0;
+                    offsetX = 0;
+                    offsetY = 0;
+                }
+                else
+                {
+                    scaleX = canvasWidth / sourceWidthPx;
+                    scaleY = canvasHeight / sourceHeightPx;
+                    scale = Math.Min(scaleX, scaleY);
+                    // Center the overlay in the canvas
+                    offsetX = (canvasWidth - sourceWidthPx * scale) / 2;
+                    offsetY = (canvasHeight - sourceHeightPx * scale) / 2;
+                }
+            }
+
+            if (scale <= 0 || double.IsInfinity(scale) || double.IsNaN(scale))
+                scale = 1.0;
+
+            // Apply scale and offset to the overlay
+            CropOverlay.Width = Math.Max(1, outputWidthPx * scale);
+            CropOverlay.Height = Math.Max(1, outputHeightPx * scale);
+            Canvas.SetLeft(CropOverlay, marginLeftPx * scale + offsetX);
+            Canvas.SetTop(CropOverlay, marginTopPx * scale + offsetY);
         }
 
         private void ResetBtn_Click(object sender, RoutedEventArgs e)
@@ -939,7 +997,40 @@ namespace ImageCropTool
             UpdateFilenameLayout();
 
             // Log the action
-            LogTextBox.AppendText("Settings reset to default.\n");
+            AppendLog("Settings reset to default.\n");
+        }
+
+        private void UpdateMaxValues()
+        {
+            string unit = GetCurrentUnit();
+            if (ActionCrop.IsChecked == true)
+            {
+                // In Crop mode, the output cannot exceed the source dimensions
+                double maxW = ConvertPixelsToUnit(sourceWidthPx, unit);
+                double maxH = ConvertPixelsToUnit(sourceHeightPx, unit);
+                WidthBox.Maximum = (int)Math.Ceiling(maxW);
+                HeightBox.Maximum = (int)Math.Ceiling(maxH);
+            }
+            else
+            {
+                // In Resize mode, allow any reasonable value (e.g., 99999)
+                WidthBox.Maximum = 99999;
+                HeightBox.Maximum = 99999;
+            }
+        }
+        private void ClampOutputToSource()
+        {
+            if (ActionCrop.IsChecked == true)
+            {
+                if (outputWidthPx > sourceWidthPx) outputWidthPx = sourceWidthPx;
+                if (outputHeightPx > sourceHeightPx) outputHeightPx = sourceHeightPx;
+                UpdateAllTextBoxes(); // refresh UI
+            }
+        }
+        private void AppendLog(string text)
+        {
+            LogTextBox.AppendText(text);
+            LogTextBox.ScrollToEnd();
         }
     }
 }
