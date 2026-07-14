@@ -87,7 +87,7 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <TextBox x:Name="SrcBox" Grid.Column="0" Margin="0,0,5,0" 
-                     Text="Write/Paste or Browse the source path of a file/folder ------->" 
+                     Text="Write/Paste or Browse the source path of a file/folder ------>" 
                      Foreground="DarkOrange" 
                      TextAlignment="Left"
                      VerticalContentAlignment="Center"
@@ -321,10 +321,10 @@
 
         <!-- Right Panel (Preview) -->
         <Grid Grid.Column="1" Margin="0,0,0,0">
-            <DockPanel>
+            <DockPanel x:Name="PreviewArea">
                 <!-- Toolbar at bottom -->
                 <Border DockPanel.Dock="Bottom" Background="White" BorderBrush="LightGray" BorderThickness="0"
-                        CornerRadius="5" Padding="0" Margin="10,0,10,0">
+                        CornerRadius="5" Padding="0" Margin="5,0,5,0">
                     <Grid >
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="auto"/>
@@ -367,14 +367,8 @@
                 <!-- Preview Canvas -->
                 <Border BorderBrush="DarkGray" BorderThickness="1" Background="LightGray" CornerRadius="5" Width="610" Height="610">
                     <Canvas x:Name="PreviewCanvas" Background="LightGray" Width="600" Height="600">
-                        <Image x:Name="PreviewImage" Stretch="Uniform" Width="600" Height="600" HorizontalAlignment="Left" VerticalAlignment="Top"/>
-
-                        <!-- Crop overlay (static position for now) -->
-                        <Border x:Name="CropOverlay" 
-                                BorderBrush="Red" BorderThickness="2" 
-                                Background="#50FF0000" Visibility="Visible"
-                                Width="200" Height="150" 
-                                Canvas.Left="30" Canvas.Top="20" />
+                        <Image x:Name="PreviewImage"  Stretch="Uniform" Width="600" Height="600" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                        <Border x:Name="CropOverlay" BorderBrush="Red" BorderThickness="2" Background="#50FF0000" Visibility="Visible" Width="200" Height="150" Canvas.Left="30" Canvas.Top="20"/>
                     </Canvas>
                 </Border>
             </DockPanel>

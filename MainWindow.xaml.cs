@@ -7,7 +7,6 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Xceed.Wpf.Toolkit;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement.Window;
 
 namespace ImageCropTool
 {
@@ -18,10 +17,7 @@ namespace ImageCropTool
             InitializeComponent();
             // Set initial states
 
-            outputWidthPx = sourceWidthPx;
-            outputHeightPx = sourceHeightPx;
-            UpdateMaxValues();
-            
+            RefreshCropUI();
             UpdateUnitAvailability();
             UpdateFilenameAvailability();
             UpdateFilenameLayout();
@@ -32,33 +28,41 @@ namespace ImageCropTool
             // Attach event handlers
             ActionCrop.Checked += Action_CheckedChanged;
             ActionResize.Checked += Action_CheckedChanged;
-            UnitPixels.Checked += Unit_CheckedChanged;
-            UnitMM.Checked += Unit_CheckedChanged;
-            UnitPer.Checked += Unit_CheckedChanged;
-            NoOverwriteChk.Checked += NoOverwrite_CheckedChanged;
-            NoOverwriteChk.Unchecked += NoOverwrite_CheckedChanged;
-            ModePrefix.Checked += ModePrefix_Checked;
-            ModeSuffix.Checked += ModeSuffix_Checked;
-            UnitPer.IsEnabled = false;
-            SrcBox.TextChanged += SrcBox_TextChanged;
-            WidthBox.ValueChanged += WidthBox_ValueChanged;
-            HeightBox.ValueChanged += HeightBox_ValueChanged;
-            MarginLeftBox.ValueChanged += MarginLeftBox_ValueChanged;
-            MargintopBox.ValueChanged += MargintopBox_ValueChanged;
             AspectRatio.Checked += AspectRatio_Checked;
             AspectRatio.Unchecked += AspectRatio_Checked;
-            WidthBox.LostFocus += WidthBox_LostFocus;
-            HeightBox.LostFocus += HeightBox_LostFocus;
-            ResetBtn.Click += ResetBtn_Click;
-            PreviewImage.SizeChanged += (s, e) => UpdateCropOverlay();
-            PreviewImage.Loaded += (s, e) => UpdateCropOverlay();
+            CropOverlay.Visibility = Visibility.Hidden;
             CropOverlay.MouseDown += CropOverlay_MouseDown;
             CropOverlay.MouseMove += CropOverlay_MouseMove;
             CropOverlay.MouseUp += CropOverlay_MouseUp;
+            HeightBox.LostFocus += HeightBox_LostFocus;
+            HeightBox.ValueChanged += HeightBox_ValueChanged;
+            MarginLeftBox.ValueChanged += MarginLeftBox_ValueChanged;
+            MargintopBox.ValueChanged += MargintopBox_ValueChanged;
+            ModePrefix.Checked += ModePrefix_Checked;
+            ModeSuffix.Checked += ModeSuffix_Checked;
+            NoOverwriteChk.Checked += NoOverwrite_CheckedChanged;
+            NoOverwriteChk.Unchecked += NoOverwrite_CheckedChanged;
+            PreviewArea.IsEnabled = false; 
             PreviewCanvas.MouseLeave += (s, e) => Cursor = Cursors.Arrow;
+            PreviewImage.Loaded += (s, e) => UpdateCropOverlay();
+            PreviewImage.SizeChanged += (s, e) => UpdateCropOverlay();
+            this.PreviewKeyDown += Window_PreviewKeyDown; 
+            ResetBtn.Click += ResetBtn_Click;
+            Rotate180.Click += (s, e) => { _currentRotation += 180; UpdateDisplayedImage(); };
+            RotateMinus90.Click += (s, e) => { _currentRotation -= 90; UpdateDisplayedImage(); };
+            RotateMore90.Click += (s, e) => { _currentRotation += 90; UpdateDisplayedImage(); };
+            SrcBox.TextChanged += SrcBox_TextChanged;
+            UnitMM.Checked += Unit_CheckedChanged;
+            UnitPer.Checked += Unit_CheckedChanged;
+            UnitPer.IsEnabled = false;
+            UnitPixels.Checked += Unit_CheckedChanged;
+            WidthBox.LostFocus += WidthBox_LostFocus;
+            WidthBox.ValueChanged += WidthBox_ValueChanged;
+
         }
 
-
+        private BitmapSource? _originalImage = null;   // the raw image (no rotation)
+        private double _currentRotation = 0;
         private void Action_CheckedChanged(object sender, RoutedEventArgs e)
         {
             if (ActionResize.IsChecked == false)            
@@ -66,10 +70,9 @@ namespace ImageCropTool
                 // When switching to Crop, ensure output doesn't exceed source
                 if (outputWidthPx > sourceWidthPx) outputWidthPx = sourceWidthPx;
                 if (outputHeightPx > sourceHeightPx) outputHeightPx = sourceHeightPx;
-                UpdateAllTextBoxes(); // refresh UI after clamping
+                RefreshCropUI(); // refresh UI after clamping
             }
             UpdateUnitAvailability();
-            UpdateMaxValues();
             UpdateFilenameLayout();
         }
 
@@ -214,7 +217,7 @@ namespace ImageCropTool
             string path = SrcBox.Text;
 
             // If the text is empty or the placeholder, show "filename"
-            if (string.IsNullOrEmpty(path) || path == "Write/Paste or Browse the source path of a file/folder ------->")
+            if (string.IsNullOrEmpty(path) || path == "Write/Paste or Browse the source path of a file/folder ------>")
             {
                 NameExample.Text = "filename";
                 return;
@@ -276,7 +279,7 @@ namespace ImageCropTool
             string currentText = SrcBox.Text;
 
             // Check if it's the default placeholder or empty
-            if (string.IsNullOrEmpty(currentText) || currentText == "Write/Paste or Browse the source path of a file/folder ------->")
+            if (string.IsNullOrEmpty(currentText) || currentText == "Write/Paste or Browse the source path of a file/folder ------>")
             {
                 // Left align for default text
                 SrcBox.FlowDirection = FlowDirection.LeftToRight;
@@ -306,7 +309,7 @@ namespace ImageCropTool
 
         private void SrcBox_GotFocus(object sender, RoutedEventArgs e)
         {
-            if (SrcBox.Text == "Write/Paste or Browse the source path of a file/folder ------->")
+            if (SrcBox.Text == "Write/Paste or Browse the source path of a file/folder ------>")
             {
                 SrcBox.Text = "";
                 SrcBox.FlowDirection = FlowDirection.LeftToRight;
@@ -318,10 +321,10 @@ namespace ImageCropTool
         private void SrcBox_LostFocus(object sender, RoutedEventArgs e)
         {
             string path = SrcBox.Text;
-            if (string.IsNullOrWhiteSpace(path) || path == "Write/Paste or Browse the source path of a file/folder ------->")
+            if (string.IsNullOrWhiteSpace(path) || path == "Write/Paste or Browse the source path of a file/folder ------>")
             {
                 // restore placeholder
-                SrcBox.Text = "Write/Paste or Browse the source path of a file/folder ------->";
+                SrcBox.Text = "Write/Paste or Browse the source path of a file/folder ------>";
                 SrcBox.FlowDirection = FlowDirection.LeftToRight;
                 SrcBox.TextAlignment = TextAlignment.Left;
                 SrcBox.HorizontalContentAlignment = HorizontalAlignment.Left;
@@ -404,12 +407,10 @@ namespace ImageCropTool
         // Initially filled with example values – you'll update these when an image is loaded.
         private int sourceWidthPx = 1000;
         private int sourceHeightPx = 2000;
-        private int outputWidthPx;
-        private int outputHeightPx;
+        private int outputWidthPx = 500;
+        private int outputHeightPx = 1000;
         private int marginLeftPx = 0;
         private int marginTopPx = 0;
-        private int _lastDisplayWidth = 1;
-        private int _lastDisplayHeight = 1;
 
         private bool _isManipulating = false;
         private string _resizeMode = "";
@@ -492,8 +493,6 @@ namespace ImageCropTool
             finally
             {
                 _updatingUI = false;
-                _lastDisplayWidth = WidthBox.Value ?? 0;
-                _lastDisplayHeight = HeightBox.Value ?? 0;
                 UpdateCropOverlay();
             }
         }
@@ -539,7 +538,7 @@ namespace ImageCropTool
 
                 outputWidthPx = w;
                 outputHeightPx = h;
-                UpdateAllTextBoxes();
+                RefreshCropUI();
             }
             else
             {
@@ -583,7 +582,7 @@ namespace ImageCropTool
 
                 outputWidthPx = w;
                 outputHeightPx = h;
-                UpdateAllTextBoxes();
+                RefreshCropUI();
             }
             else
             {
@@ -594,12 +593,14 @@ namespace ImageCropTool
         {
             if (_updatingUI || !IsLoaded) return;
             UpdatePixelFromBox(MarginLeftBox, ref marginLeftPx, sourceWidthPx, false);
+            RefreshCropUI();
         }
 
         private void MargintopBox_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             if (_updatingUI || !IsLoaded) return;
             UpdatePixelFromBox(MargintopBox, ref marginTopPx, sourceHeightPx, false);
+            RefreshCropUI();
         }
 
         private void UpdatePixelFromBox(IntegerUpDown box, ref int pixelField, int sourceDimensionPx, bool clampToMin = true)
@@ -618,21 +619,10 @@ namespace ImageCropTool
                 pixelField = ConvertUnitToPixels(displayValue, unit, clampToMin);
             }
 
-            UpdateAllTextBoxes();
+            RefreshCropUI();
         }
 
         private bool _updatingUI = false;
-
-        private int GCD(int a, int b)
-        {
-            while (b != 0)
-            {
-                int temp = b;
-                b = a % b;
-                a = temp;
-            }
-            return a;
-        }
 
         private void AdjustAspectRatio()
         {
@@ -719,72 +709,25 @@ namespace ImageCropTool
                 UpdateAllTextBoxes();
             }
         }
-
-        private (int width, int height)? GetImageDimensions(string filePath)
-        {
-            try
-            {
-                var bitmap = new BitmapImage();
-                bitmap.BeginInit();
-                bitmap.UriSource = new Uri(filePath);
-                bitmap.DecodePixelWidth = 0; // forces full resolution
-                bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                bitmap.EndInit();
-                bitmap.Freeze(); // optional, for better performance
-
-                return (bitmap.PixelWidth, bitmap.PixelHeight);
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
         private void LoadPath(string path)
         {
-            if (System.IO.File.Exists(path))
+            if (File.Exists(path))
             {
-                AppendLog($"Selected file: {System.IO.Path.GetFileName(path)}\n");
-                var dims = GetImageDimensions(path);
-                if (dims.HasValue)
-                {
-                    int? orientation = GetExifOrientation(path);
-                    if (orientation.HasValue)
-                        AppendLog($"EXIF Orientation value: {orientation.Value}\n");
-                    else
-                        AppendLog("No EXIF orientation metadata found.\n"); 
-                    
-                    SetSourceDimensions(dims.Value.width, dims.Value.height);
-                    AppendLog($"Loaded dimensions: {dims.Value.width} × {dims.Value.height} px\n");
-                    LoadPreviewImage(path);
-                }
-                else
-                {
-                    AppendLog("Warning: Could not read image dimensions.\n");
-                }
+                AppendLog($"Selected file: {Path.GetFileName(path)}\n");
+                LoadPreviewImage(path);   // ✅ loads once, sets dimensions internally
             }
-            else if (System.IO.Directory.Exists(path))
+            else if (Directory.Exists(path))
             {
                 AppendLog($"Selected folder: {path}\n");
-                // Find first image file
                 string[] extensions = { "*.jpg", "*.jpeg", "*.png", "*.bmp", "*.gif", "*.tiff" };
                 bool found = false;
                 foreach (var ext in extensions)
                 {
-                    var files = System.IO.Directory.GetFiles(path, ext, System.IO.SearchOption.TopDirectoryOnly);
+                    var files = Directory.GetFiles(path, ext, SearchOption.TopDirectoryOnly);
                     if (files.Length > 0)
                     {
-                        var dims = GetImageDimensions(files[0]);
-                        if (dims.HasValue)
-                        {
-                            SetSourceDimensions(dims.Value.width, dims.Value.height);
-                            AppendLog($"Using first image: {System.IO.Path.GetFileName(files[0])} ({dims.Value.width} × {dims.Value.height} px)\n");
-                            LoadPreviewImage(files[0]);
-                        }
-                        else
-                        {
-                            AppendLog($"Warning: Could not read dimensions from {System.IO.Path.GetFileName(files[0])}\n");
-                        }
+                        LoadPreviewImage(files[0]);   // ✅ loads once, sets dimensions internally
+                        AppendLog($"Using first image: {Path.GetFileName(files[0])}\n");
                         found = true;
                         break;
                     }
@@ -797,7 +740,6 @@ namespace ImageCropTool
                 AppendLog($"Path not found: {path}\n");
             }
         }
-
         private void UpdateCropOverlay()
         {
             if (sourceWidthPx <= 0 || sourceHeightPx <= 0) return;
@@ -842,17 +784,20 @@ namespace ImageCropTool
         private void UpdateMaxValues()
         {
             string unit = GetCurrentUnit();
+
             if (ActionCrop.IsChecked == true)
             {
-                // In Crop mode, the output cannot exceed the source dimensions
-                double maxW = ConvertPixelsToUnit(sourceWidthPx, unit);
-                double maxH = ConvertPixelsToUnit(sourceHeightPx, unit);
-                WidthBox.Maximum = (int)Math.Ceiling(maxW);
-                HeightBox.Maximum = (int)Math.Ceiling(maxH);
+                int maxWidthPx = sourceWidthPx - marginLeftPx;
+                int maxHeightPx = sourceHeightPx - marginTopPx;
+
+                WidthBox.Maximum =
+                    (int)Math.Ceiling(ConvertPixelsToUnit(maxWidthPx, unit));
+
+                HeightBox.Maximum =
+                    (int)Math.Ceiling(ConvertPixelsToUnit(maxHeightPx, unit));
             }
             else
             {
-                // In Resize mode, allow any reasonable value (e.g., 99999)
                 WidthBox.Maximum = 99999;
                 HeightBox.Maximum = 99999;
             }
@@ -872,19 +817,58 @@ namespace ImageCropTool
                 bitmap.BeginInit();
                 bitmap.UriSource = new Uri(filePath);
                 bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                bitmap.DecodePixelWidth = 0; // full resolution
+                bitmap.DecodePixelWidth = 0;
                 bitmap.EndInit();
-                bitmap.Freeze(); // makes it cross-thread safe
-                PreviewImage.Source = bitmap;
+                bitmap.Freeze();
+
+                _originalImage = bitmap;
+                _currentRotation = 0;
+
+                // ✅ Read dimensions from the loaded bitmap
+                int w = bitmap.PixelWidth;
+                int h = bitmap.PixelHeight;
+                SetSourceDimensions(w, h);          // update UI with the correct dimensions
+
+                UpdateDisplayedImage();              // applies rotation (0°) and shows it
                 _currentImagePath = filePath;
+                PreviewArea.IsEnabled = true;
+                CropOverlay.Visibility = Visibility.Visible;
+                AppendLog($"Loaded dimensions: {w} × {h} px\n");
             }
             catch (Exception ex)
             {
                 PreviewImage.Source = null;
+                PreviewArea.IsEnabled = false;
+                CropOverlay.Visibility = Visibility.Hidden;
                 AppendLog($"Failed to load preview: {ex.Message}\n");
             }
         }
+        private void UpdateDisplayedImage()
+        {
+            if (_originalImage == null) return;
 
+            BitmapSource display = _originalImage;
+            if (Math.Abs(_currentRotation % 360) > 0.001)
+            {
+                var transform = new RotateTransform(_currentRotation);
+                display = new TransformedBitmap(_originalImage, transform);
+                display.Freeze();
+            }
+
+            PreviewImage.Source = display;
+
+            // Compute new effective dimensions after rotation
+            int w = _originalImage.PixelWidth;
+            int h = _originalImage.PixelHeight;
+            double angle = _currentRotation % 360;
+            if (Math.Abs(angle) > 0.1 && Math.Abs(angle - 180) > 0.1) // 90 or 270
+            {
+                w = _originalImage.PixelHeight;
+                h = _originalImage.PixelWidth;
+            }
+
+            SetSourceDimensions(w, h);   // updates sourceWidthPx / sourceHeightPx and the UI
+        }
         private (int w, int h) FindBestAspectRatioPair(int targetW, int targetH, int sourceW, int sourceH, int searchRadius = 5)
         {
             double bestCost = double.MaxValue;
@@ -935,7 +919,8 @@ namespace ImageCropTool
         private void CropOverlay_MouseDown(object sender, MouseButtonEventArgs e)
         {
             if (e.LeftButton != MouseButtonState.Pressed) return;
-            if (ActionResize.IsChecked == true) return; // disable in Resize mode
+            if (ActionResize.IsChecked == true) return;
+
             CropOverlay.CaptureMouse();
             Point pos = e.GetPosition(PreviewCanvas);
             double left = Canvas.GetLeft(CropOverlay);
@@ -949,12 +934,25 @@ namespace ImageCropTool
             bool nearTop = Math.Abs(pos.Y - top) < tolerance;
             bool nearBottom = Math.Abs(pos.Y - bottom) < tolerance;
 
-            // Determine resize mode: only edges, no corners
-            if (nearLeft) _resizeMode = "ResizeLeft";
-            else if (nearRight) _resizeMode = "ResizeRight";
-            else if (nearTop) _resizeMode = "ResizeTop";
-            else if (nearBottom) _resizeMode = "ResizeBottom";
-            else _resizeMode = "Drag";
+            // Determine resize mode – corners take priority over edges
+            if (nearLeft && nearTop)
+                _resizeMode = "ResizeTopLeft";
+            else if (nearRight && nearTop)
+                _resizeMode = "ResizeTopRight";
+            else if (nearLeft && nearBottom)
+                _resizeMode = "ResizeBottomLeft";
+            else if (nearRight && nearBottom)
+                _resizeMode = "ResizeBottomRight";
+            else if (nearLeft)
+                _resizeMode = "ResizeLeft";
+            else if (nearRight)
+                _resizeMode = "ResizeRight";
+            else if (nearTop)
+                _resizeMode = "ResizeTop";
+            else if (nearBottom)
+                _resizeMode = "ResizeBottom";
+            else
+                _resizeMode = "Drag";
 
             _isManipulating = true;
             _startMousePos = pos;
@@ -965,7 +963,6 @@ namespace ImageCropTool
 
             e.Handled = true;
         }
-
         private void CropOverlay_MouseMove(object sender, MouseEventArgs e)
         {
             Point pos = e.GetPosition(PreviewCanvas);
@@ -984,11 +981,20 @@ namespace ImageCropTool
                 bool nearTop = Math.Abs(pos.Y - top) < tolerance;
                 bool nearBottom = Math.Abs(pos.Y - bottom) < tolerance;
 
-                if (nearLeft) Cursor = Cursors.SizeWE;
-                else if (nearRight) Cursor = Cursors.SizeWE;
-                else if (nearTop) Cursor = Cursors.SizeNS;
-                else if (nearBottom) Cursor = Cursors.SizeNS;
-                else Cursor = Cursors.Hand;
+                if (nearLeft && nearTop)
+                    Cursor = Cursors.SizeNWSE;
+                else if (nearRight && nearTop)
+                    Cursor = Cursors.SizeNESW;
+                else if (nearLeft && nearBottom)
+                    Cursor = Cursors.SizeNESW;
+                else if (nearRight && nearBottom)
+                    Cursor = Cursors.SizeNWSE;
+                else if (nearLeft || nearRight)
+                    Cursor = Cursors.SizeWE;
+                else if (nearTop || nearBottom)
+                    Cursor = Cursors.SizeNS;
+                else
+                    Cursor = Cursors.Hand;
                 return;
             }
 
@@ -1008,34 +1014,27 @@ namespace ImageCropTool
             switch (_resizeMode)
             {
                 case "Drag":
-                    // Move overlay: only margins change; size unchanged
                     newMarginLeft = (int)Math.Round(_startMarginLeftPx + deltaX);
                     newMarginTop = (int)Math.Round(_startMarginTopPx + deltaY);
-                    // Clamp margins so the overlay stays inside the source image
                     newMarginLeft = Clamp(newMarginLeft, 0, sourceWidthPx - newWidth);
                     newMarginTop = Clamp(newMarginTop, 0, sourceHeightPx - newHeight);
                     break;
 
                 case "ResizeLeft":
-                    // Only horizontal movement matters
                     newMarginLeft = (int)Math.Round(_startMarginLeftPx + deltaX);
-                    // Width changes inversely: newWidth = _startWidthPx - (newMarginLeft - _startMarginLeftPx)
                     newWidth = _startWidthPx - (newMarginLeft - _startMarginLeftPx);
-                    // Clamp
                     if (newMarginLeft < 0) { newWidth += newMarginLeft; newMarginLeft = 0; }
                     if (newWidth < 1) { newWidth = 1; newMarginLeft = Math.Min(newMarginLeft, sourceWidthPx - 1); }
                     if (newMarginLeft + newWidth > sourceWidthPx) newWidth = sourceWidthPx - newMarginLeft;
                     break;
 
                 case "ResizeRight":
-                    // Only horizontal movement matters
                     newWidth = (int)Math.Round(_startWidthPx + deltaX);
                     if (newWidth < 1) newWidth = 1;
                     if (newMarginLeft + newWidth > sourceWidthPx) newWidth = sourceWidthPx - newMarginLeft;
                     break;
 
                 case "ResizeTop":
-                    // Only vertical movement matters
                     newMarginTop = (int)Math.Round(_startMarginTopPx + deltaY);
                     newHeight = _startHeightPx - (newMarginTop - _startMarginTopPx);
                     if (newMarginTop < 0) { newHeight += newMarginTop; newMarginTop = 0; }
@@ -1044,9 +1043,57 @@ namespace ImageCropTool
                     break;
 
                 case "ResizeBottom":
-                    // Only vertical movement matters
                     newHeight = (int)Math.Round(_startHeightPx + deltaY);
                     if (newHeight < 1) newHeight = 1;
+                    if (newMarginTop + newHeight > sourceHeightPx) newHeight = sourceHeightPx - newMarginTop;
+                    break;
+
+                // ---- NEW CORNER CASES ----
+                case "ResizeTopLeft":
+                    newMarginLeft = (int)Math.Round(_startMarginLeftPx + deltaX);
+                    newMarginTop = (int)Math.Round(_startMarginTopPx + deltaY);
+                    newWidth = _startWidthPx - (newMarginLeft - _startMarginLeftPx);
+                    newHeight = _startHeightPx - (newMarginTop - _startMarginTopPx);
+
+                    // Clamp margins and ensure minimum size
+                    if (newMarginLeft < 0) { newWidth += newMarginLeft; newMarginLeft = 0; }
+                    if (newMarginTop < 0) { newHeight += newMarginTop; newMarginTop = 0; }
+                    if (newWidth < 1) { newWidth = 1; newMarginLeft = Math.Min(newMarginLeft, sourceWidthPx - 1); }
+                    if (newHeight < 1) { newHeight = 1; newMarginTop = Math.Min(newMarginTop, sourceHeightPx - 1); }
+                    if (newMarginLeft + newWidth > sourceWidthPx) newWidth = sourceWidthPx - newMarginLeft;
+                    if (newMarginTop + newHeight > sourceHeightPx) newHeight = sourceHeightPx - newMarginTop;
+                    break;
+
+                case "ResizeTopRight":
+                    newMarginTop = (int)Math.Round(_startMarginTopPx + deltaY);
+                    newWidth = (int)Math.Round(_startWidthPx + deltaX);
+                    newHeight = _startHeightPx - (newMarginTop - _startMarginTopPx);
+
+                    if (newMarginTop < 0) { newHeight += newMarginTop; newMarginTop = 0; }
+                    if (newWidth < 1) newWidth = 1;
+                    if (newHeight < 1) { newHeight = 1; newMarginTop = Math.Min(newMarginTop, sourceHeightPx - 1); }
+                    if (newMarginLeft + newWidth > sourceWidthPx) newWidth = sourceWidthPx - newMarginLeft;
+                    if (newMarginTop + newHeight > sourceHeightPx) newHeight = sourceHeightPx - newMarginTop;
+                    break;
+
+                case "ResizeBottomLeft":
+                    newMarginLeft = (int)Math.Round(_startMarginLeftPx + deltaX);
+                    newHeight = (int)Math.Round(_startHeightPx + deltaY);
+                    newWidth = _startWidthPx - (newMarginLeft - _startMarginLeftPx);
+
+                    if (newMarginLeft < 0) { newWidth += newMarginLeft; newMarginLeft = 0; }
+                    if (newWidth < 1) { newWidth = 1; newMarginLeft = Math.Min(newMarginLeft, sourceWidthPx - 1); }
+                    if (newHeight < 1) newHeight = 1;
+                    if (newMarginLeft + newWidth > sourceWidthPx) newWidth = sourceWidthPx - newMarginLeft;
+                    if (newMarginTop + newHeight > sourceHeightPx) newHeight = sourceHeightPx - newMarginTop;
+                    break;
+
+                case "ResizeBottomRight":
+                    newWidth = (int)Math.Round(_startWidthPx + deltaX);
+                    newHeight = (int)Math.Round(_startHeightPx + deltaY);
+                    if (newWidth < 1) newWidth = 1;
+                    if (newHeight < 1) newHeight = 1;
+                    if (newMarginLeft + newWidth > sourceWidthPx) newWidth = sourceWidthPx - newMarginLeft;
                     if (newMarginTop + newHeight > sourceHeightPx) newHeight = sourceHeightPx - newMarginTop;
                     break;
             }
@@ -1060,7 +1107,6 @@ namespace ImageCropTool
             UpdateAllTextBoxes();
             e.Handled = true;
         }
-
         private void CropOverlay_MouseUp(object sender, MouseButtonEventArgs e)
         {
             if (_isManipulating)
@@ -1072,28 +1118,96 @@ namespace ImageCropTool
                 e.Handled = true;
             }
         }
+        private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            // Only handle when Crop mode is active and overlay is visible
+            if (ActionCrop.IsChecked != true || CropOverlay.Visibility != Visibility.Visible)
+                return;
+
+            // Ignore if the user is currently dragging with the mouse
+            if (_isManipulating)
+                return;
+
+            // Determine step size
+            int step = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? 10 : 1;
+
+            int dx = 0, dy = 0;
+
+            switch (e.Key)
+            {
+                case Key.Left: dx = -step; break;
+                case Key.Right: dx = step; break;
+                case Key.Up: dy = -step; break;
+                case Key.Down: dy = step; break;
+                default: return; // not an arrow key
+            }
+
+            MoveOverlay(dx, dy);
+            e.Handled = true; // prevent other actions
+        }
+
+        private void MoveOverlay(int dx, int dy)
+        {
+            // Calculate new margins
+            int newLeft = marginLeftPx + dx;
+            int newTop = marginTopPx + dy;
+
+            // Clamp to keep the overlay inside the image
+            newLeft = Clamp(newLeft, 0, sourceWidthPx - outputWidthPx);
+            newTop = Clamp(newTop, 0, sourceHeightPx - outputHeightPx);
+
+            // Only update if changed
+            if (newLeft != marginLeftPx || newTop != marginTopPx)
+            {
+                marginLeftPx = newLeft;
+                marginTopPx = newTop;
+                RefreshCropUI(); // updates UI and overlay position
+            }
+        }
         private int Clamp(int value, int min, int max) => value < min ? min : (value > max ? max : value);
 
         private const double EdgeTolerance = 12.0;
-
-        private int? GetExifOrientation(string filePath)
+        
+        private void ClampCropRectangle()
         {
-            try
-            {
-                using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-                var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.None, BitmapCacheOption.None);
-                var metadata = decoder.Frames[0].Metadata as BitmapMetadata;
-                if (metadata == null) return null;
+            // Prevent invalid sizes
+            outputWidthPx = Math.Max(1, outputWidthPx);
+            outputHeightPx = Math.Max(1, outputHeightPx);
 
-                if (metadata.ContainsQuery("/ifd/{ushort=274}"))
-                    return Convert.ToInt32(metadata.GetQuery("/ifd/{ushort=274}"));
-                if (metadata.ContainsQuery("/app1/ifd/{ushort=274}"))
-                    return Convert.ToInt32(metadata.GetQuery("/app1/ifd/{ushort=274}"));
-                if (metadata.ContainsQuery("/ifd/exif/{ushort=274}"))
-                    return Convert.ToInt32(metadata.GetQuery("/ifd/exif/{ushort=274}"));
+            // Crop mode cannot exceed source image
+            if (ActionCrop.IsChecked == true)
+            {
+                outputWidthPx = Math.Min(outputWidthPx, sourceWidthPx);
+                outputHeightPx = Math.Min(outputHeightPx, sourceHeightPx);
             }
-            catch { }
-            return null;
+
+            // Prevent negative margins
+            marginLeftPx = Math.Max(0, marginLeftPx);
+            marginTopPx = Math.Max(0, marginTopPx);
+
+            // Prevent crop rectangle from leaving the image
+            if (ActionCrop.IsChecked == true)
+            {
+                if (marginLeftPx + outputWidthPx > sourceWidthPx)
+                    outputWidthPx = sourceWidthPx - marginLeftPx;
+
+                if (marginTopPx + outputHeightPx > sourceHeightPx)
+                    outputHeightPx = sourceHeightPx - marginTopPx;
+
+                // If the width/height changed first,
+                // make sure the margins are still valid.
+                marginLeftPx = Math.Min(marginLeftPx, sourceWidthPx - outputWidthPx);
+                marginTopPx = Math.Min(marginTopPx, sourceHeightPx - outputHeightPx);
+
+                marginLeftPx = Math.Max(0, marginLeftPx);
+                marginTopPx = Math.Max(0, marginTopPx);
+            }
+        }
+        private void RefreshCropUI()
+        {
+            ClampCropRectangle();
+            UpdateMaxValues();
+            UpdateAllTextBoxes();
         }
     }
 
