@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ImageCropTool")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+64733fb79dbb30acce1a0edeca2f9f5e3ed07632")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+6837c003a2faa2e184bf1fa2e0ed9bbd3b154c4d")]
 [assembly: System.Reflection.AssemblyProductAttribute("ImageCropTool")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ImageCropTool")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

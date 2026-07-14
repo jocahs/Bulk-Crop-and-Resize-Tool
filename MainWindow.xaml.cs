@@ -3,6 +3,7 @@ using System;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Xceed.Wpf.Toolkit;
@@ -52,19 +53,17 @@ namespace ImageCropTool
             PreviewImage.SizeChanged += (s, e) => UpdateCropOverlay();
             PreviewImage.Loaded += (s, e) => UpdateCropOverlay();
             PreviewImage.Loaded += (s, e) => UpdateCropOverlay();
+            CropOverlay.MouseDown += CropOverlay_MouseDown;
+            CropOverlay.MouseMove += CropOverlay_MouseMove;
+            CropOverlay.MouseUp += CropOverlay_MouseUp;
+            PreviewCanvas.MouseLeave += (s, e) => Cursor = Cursors.Arrow;
         }
 
 
         private void Action_CheckedChanged(object sender, RoutedEventArgs e)
         {
-            if (ActionResize.IsChecked == true)
+            if (ActionResize.IsChecked == false)            
             {
-                marginLeftPx = 0;
-                marginTopPx = 0;
-            }
-            else
-            {
-                AspectRatio.IsChecked = false;
                 // When switching to Crop, ensure output doesn't exceed source
                 if (outputWidthPx > sourceWidthPx) outputWidthPx = sourceWidthPx;
                 if (outputHeightPx > sourceHeightPx) outputHeightPx = sourceHeightPx;
@@ -101,11 +100,6 @@ namespace ImageCropTool
             StackRatio.IsEnabled = isResize;
             MarginsSettings.IsEnabled = !isResize;
             CropOverlay.Visibility = isResize ? Visibility.Collapsed : Visibility.Visible;
-            if (isResize)
-            {
-                marginLeftPx = 0;
-                marginTopPx = 0;
-            }
 
             // If UnitPer is selected but now disabled, switch to Pixels
             if (!isResize && UnitPer.IsChecked == true)
@@ -332,6 +326,7 @@ namespace ImageCropTool
                 SrcBox.FlowDirection = FlowDirection.LeftToRight;
                 SrcBox.TextAlignment = TextAlignment.Left;
                 SrcBox.HorizontalContentAlignment = HorizontalAlignment.Left;
+                PreviewImage.Source = null;   // <-- clear preview
                 return;
             }
 
@@ -352,6 +347,8 @@ namespace ImageCropTool
         }
 
         private string? userCustomText = null; // Store user custom text
+
+        private string? _currentImagePath = null;
 
         private void UpdateFilenameLayout()
         {
@@ -415,6 +412,11 @@ namespace ImageCropTool
         private int _lastDisplayWidth = 1;
         private int _lastDisplayHeight = 1;
 
+        private bool _isManipulating = false;
+        private string _resizeMode = "";
+        private Point _startMousePos;
+        private int _startMarginLeftPx, _startMarginTopPx, _startWidthPx, _startHeightPx;
+
         private string GetCurrentUnit()
         {
             if (UnitPixels.IsChecked == true) return "px";
@@ -463,85 +465,23 @@ namespace ImageCropTool
                     MarginLeftBox.Value = 0;
                     MargintopBox.Value = 0;
                 }
-                else if (unit == "mm")
+                else // pixels or millimeters
                 {
-                    var (rw, rh) = GetReducedRatio();
+                    // Source dimensions (converted and rounded)
+                    int srcW = (int)Math.Round(ConvertPixelsToUnit(sourceWidthPx, unit));
+                    int srcH = (int)Math.Round(ConvertPixelsToUnit(sourceHeightPx, unit));
+                    WidthSourceBox.Text = Math.Max(1, srcW).ToString();
+                    HeightSourceBox.Text = Math.Max(1, srcH).ToString();
 
-                    // ----- Source dimensions -----
-                    if (AspectRatio.IsChecked == true)
-                    {
-                        double actualSrc_mmW = ConvertPixelsToUnit(sourceWidthPx, "mm");
-                        double actualSrc_mmH = ConvertPixelsToUnit(sourceHeightPx, "mm");
+                    // Output dimensions (converted and rounded)
+                    int outW = (int)Math.Round(ConvertPixelsToUnit(outputWidthPx, unit));
+                    int outH = (int)Math.Round(ConvertPixelsToUnit(outputHeightPx, unit));
+                    WidthBox.Value = Math.Max(1, outW);
+                    HeightBox.Value = Math.Max(1, outH);
 
-                        int k1 = (int)Math.Round(actualSrc_mmW / rw);
-                        int k2 = (int)Math.Round(actualSrc_mmH / rh);
-                        if (k1 < 1) k1 = 1;
-                        if (k2 < 1) k2 = 1;
-
-                        double err1 = Math.Abs(actualSrc_mmW - k1 * rw) + Math.Abs(actualSrc_mmH - k1 * rh);
-                        double err2 = Math.Abs(actualSrc_mmW - k2 * rw) + Math.Abs(actualSrc_mmH - k2 * rh);
-                        int kSrc = err1 <= err2 ? k1 : k2;
-
-                        int srcW_mm = kSrc * rw;
-                        int srcH_mm = kSrc * rh;
-                        WidthSourceBox.Text = Math.Max(1, srcW_mm).ToString();
-                        HeightSourceBox.Text = Math.Max(1, srcH_mm).ToString();
-                    }
-                    else
-                    {
-                        int srcW_mm = (int)Math.Round(ConvertPixelsToUnit(sourceWidthPx, "mm"));
-                        int srcH_mm = (int)Math.Round(ConvertPixelsToUnit(sourceHeightPx, "mm"));
-                        WidthSourceBox.Text = Math.Max(1, srcW_mm).ToString();
-                        HeightSourceBox.Text = Math.Max(1, srcH_mm).ToString();
-                    }
-
-                    // ----- Output dimensions -----
-                    if (AspectRatio.IsChecked == true)
-                    {
-                        double actual_mmW = ConvertPixelsToUnit(outputWidthPx, "mm");
-                        double actual_mmH = ConvertPixelsToUnit(outputHeightPx, "mm");
-
-                        int k1_out = (int)Math.Round(actual_mmW / rw);
-                        int k2_out = (int)Math.Round(actual_mmH / rh);
-                        if (k1_out < 1) k1_out = 1;
-                        if (k2_out < 1) k2_out = 1;
-
-                        double err1_out = Math.Abs(actual_mmW - k1_out * rw) + Math.Abs(actual_mmH - k1_out * rh);
-                        double err2_out = Math.Abs(actual_mmW - k2_out * rw) + Math.Abs(actual_mmH - k2_out * rh);
-                        int kOut = err1_out <= err2_out ? k1_out : k2_out;
-
-                        int outW_mm = kOut * rw;
-                        int outH_mm = kOut * rh;
-                        WidthBox.Value = outW_mm;
-                        HeightBox.Value = outH_mm;
-                    }
-                    else
-                    {
-                        int outW_mm = (int)Math.Round(ConvertPixelsToUnit(outputWidthPx, "mm"));
-                        int outH_mm = (int)Math.Round(ConvertPixelsToUnit(outputHeightPx, "mm"));
-                        WidthBox.Value = Math.Max(1, outW_mm);
-                        HeightBox.Value = Math.Max(1, outH_mm);
-                    }
-
-                    // ----- Margins (always independent) -----
-                    int mL_mm = (int)Math.Round(ConvertPixelsToUnit(marginLeftPx, "mm"));
-                    int mT_mm = (int)Math.Round(ConvertPixelsToUnit(marginTopPx, "mm"));
-                    MarginLeftBox.Value = mL_mm;
-                    MargintopBox.Value = mT_mm;
-                }
-                else // pixels
-                {
-                    int srcW = Math.Max(1, (int)Math.Round(ConvertPixelsToUnit(sourceWidthPx, "px")));
-                    int srcH = Math.Max(1, (int)Math.Round(ConvertPixelsToUnit(sourceHeightPx, "px")));
-                    int outW = Math.Max(1, (int)Math.Round(ConvertPixelsToUnit(outputWidthPx, "px")));
-                    int outH = Math.Max(1, (int)Math.Round(ConvertPixelsToUnit(outputHeightPx, "px")));
-                    int mL = (int)Math.Round(ConvertPixelsToUnit(marginLeftPx, "px"));
-                    int mT = (int)Math.Round(ConvertPixelsToUnit(marginTopPx, "px"));
-
-                    WidthSourceBox.Text = srcW.ToString();
-                    HeightSourceBox.Text = srcH.ToString();
-                    WidthBox.Value = outW;
-                    HeightBox.Value = outH;
+                    // Margins
+                    int mL = (int)Math.Round(ConvertPixelsToUnit(marginLeftPx, unit));
+                    int mT = (int)Math.Round(ConvertPixelsToUnit(marginTopPx, unit));
                     MarginLeftBox.Value = mL;
                     MargintopBox.Value = mT;
                 }
@@ -558,6 +498,7 @@ namespace ImageCropTool
                 UpdateCropOverlay();
             }
         }
+        
         private void WidthBox_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             if (_updatingUI || !IsLoaded) return;
@@ -567,14 +508,11 @@ namespace ImageCropTool
                 string unit = GetCurrentUnit();
                 int newDisplayValue = WidthBox.Value ?? 0;
 
-                // Percentage mode: both percentages are equal (uniform scaling)
+                // Percentage mode – keep both percentages equal
                 if (unit == "%")
                 {
                     double newWidthPercent = newDisplayValue;
                     double newHeightPercent = newWidthPercent;
-
-                    int newHeightDisplay = (int)Math.Round(newHeightPercent);
-                    if (newHeightDisplay < 1) newHeightDisplay = 1;
 
                     outputWidthPx = (int)Math.Round(newWidthPercent / 100.0 * sourceWidthPx);
                     outputHeightPx = (int)Math.Round(newHeightPercent / 100.0 * sourceHeightPx);
@@ -585,40 +523,23 @@ namespace ImageCropTool
                     return;
                 }
 
-                var (rw, rh) = GetReducedRatio();
-                double rwUnit = ConvertPixelsToUnit(rw, unit); // size of one reduced unit in current unit
+                // Convert the new displayed width to pixels
+                int targetW = ConvertUnitToPixels(newDisplayValue, unit, false);
+                int targetH = (int)Math.Round((double)targetW * sourceHeightPx / sourceWidthPx);
+                if (targetH < 1) targetH = 1;
 
-                int oldDisplayValue = _lastDisplayWidth;
-                bool increasing = newDisplayValue > oldDisplayValue;
-                bool decreasing = newDisplayValue < oldDisplayValue;
+                // Find the best integer pair preserving the ratio
+                var (w, h) = FindBestAspectRatioPair(targetW, targetH, sourceWidthPx, sourceHeightPx);
 
-                int k;
-                if (increasing)
+                // Apply Crop limits
+                if (ActionCrop.IsChecked == true)
                 {
-                    // Find the smallest k such that rounded(k * rwUnit) >= newDisplayValue
-                    k = 1;
-                    while ((int)Math.Round(k * rwUnit) < newDisplayValue)
-                        k++;
-                }
-                else if (decreasing)
-                {
-                    // Find the largest k such that rounded(k * rwUnit) <= newDisplayValue
-                    // Start from a reasonable high estimate (based on the entered value)
-                    k = (int)Math.Floor((newDisplayValue + 0.5) / rwUnit);
-                    if (k < 1) k = 1;
-                    // Adjust downward if necessary
-                    while ((int)Math.Round(k * rwUnit) > newDisplayValue)
-                        k--;
-                    if (k < 1) k = 1;
-                }
-                else // no change – keep current
-                {
-                    k = (int)Math.Round((double)outputWidthPx / rw);
-                    if (k < 1) k = 1;
+                    w = Math.Min(w, sourceWidthPx);
+                    h = Math.Min(h, sourceHeightPx);
                 }
 
-                outputWidthPx = k * rw;
-                outputHeightPx = k * rh;
+                outputWidthPx = w;
+                outputHeightPx = h;
                 UpdateAllTextBoxes();
             }
             else
@@ -626,7 +547,6 @@ namespace ImageCropTool
                 UpdatePixelFromBox(WidthBox, ref outputWidthPx, sourceWidthPx, true);
             }
         }
-
         private void HeightBox_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             if (_updatingUI || !IsLoaded) return;
@@ -640,8 +560,6 @@ namespace ImageCropTool
                 {
                     double newHeightPercent = newDisplayValue;
                     double newWidthPercent = newHeightPercent;
-                    int newWidthDisplay = (int)Math.Round(newWidthPercent);
-                    if (newWidthDisplay < 1) newWidthDisplay = 1;
 
                     outputWidthPx = (int)Math.Round(newWidthPercent / 100.0 * sourceWidthPx);
                     outputHeightPx = (int)Math.Round(newHeightPercent / 100.0 * sourceHeightPx);
@@ -652,36 +570,20 @@ namespace ImageCropTool
                     return;
                 }
 
-                var (rw, rh) = GetReducedRatio();
-                double rhUnit = ConvertPixelsToUnit(rh, unit);
+                int targetH = ConvertUnitToPixels(newDisplayValue, unit, false);
+                int targetW = (int)Math.Round((double)targetH * sourceWidthPx / sourceHeightPx);
+                if (targetW < 1) targetW = 1;
 
-                int oldDisplayValue = _lastDisplayHeight;
-                bool increasing = newDisplayValue > oldDisplayValue;
-                bool decreasing = newDisplayValue < oldDisplayValue;
+                var (w, h) = FindBestAspectRatioPair(targetW, targetH, sourceWidthPx, sourceHeightPx);
 
-                int k;
-                if (increasing)
+                if (ActionCrop.IsChecked == true)
                 {
-                    k = 1;
-                    while ((int)Math.Round(k * rhUnit) < newDisplayValue)
-                        k++;
-                }
-                else if (decreasing)
-                {
-                    k = (int)Math.Floor((newDisplayValue + 0.5) / rhUnit);
-                    if (k < 1) k = 1;
-                    while ((int)Math.Round(k * rhUnit) > newDisplayValue)
-                        k--;
-                    if (k < 1) k = 1;
-                }
-                else
-                {
-                    k = (int)Math.Round((double)outputHeightPx / rh);
-                    if (k < 1) k = 1;
+                    w = Math.Min(w, sourceWidthPx);
+                    h = Math.Min(h, sourceHeightPx);
                 }
 
-                outputWidthPx = k * rw;
-                outputHeightPx = k * rh;
+                outputWidthPx = w;
+                outputHeightPx = h;
                 UpdateAllTextBoxes();
             }
             else
@@ -689,7 +591,6 @@ namespace ImageCropTool
                 UpdatePixelFromBox(HeightBox, ref outputHeightPx, sourceHeightPx, true);
             }
         }
-
         private void MarginLeftBox_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             if (_updatingUI || !IsLoaded) return;
@@ -734,38 +635,26 @@ namespace ImageCropTool
             return a;
         }
 
-        private (int rw, int rh) GetReducedRatio()
-        {
-            int g = GCD(sourceWidthPx, sourceHeightPx);
-            return (sourceWidthPx / g, sourceHeightPx / g);
-        }
-
         private void AdjustAspectRatio()
         {
             if (!AspectRatio.IsChecked == true) return;
             if (sourceWidthPx <= 0 || sourceHeightPx <= 0) return;
 
-            var (rw, rh) = GetReducedRatio();
-            int k;
+            int targetW = outputWidthPx;
+            int targetH = outputHeightPx;
+            var (w, h) = FindBestAspectRatioPair(targetW, targetH, sourceWidthPx, sourceHeightPx);
 
-            if (sourceWidthPx <= sourceHeightPx)
+            // Apply Crop limits if needed
+            if (ActionCrop.IsChecked == true)
             {
-                // Keep width – compute k from current outputWidthPx
-                k = (int)Math.Round((double)outputWidthPx / rw);
-                if (k < 1) k = 1;
-            }
-            else
-            {
-                // Keep height – compute k from current outputHeightPx
-                k = (int)Math.Round((double)outputHeightPx / rh);
-                if (k < 1) k = 1;
+                w = Math.Min(w, sourceWidthPx);
+                h = Math.Min(h, sourceHeightPx);
             }
 
-            outputWidthPx = k * rw;
-            outputHeightPx = k * rh;
+            outputWidthPx = w;
+            outputHeightPx = h;
             UpdateAllTextBoxes();
         }
-
         private void AspectRatio_Checked(object sender, RoutedEventArgs e)
         {
             if (AspectRatio.IsChecked == true)
@@ -792,24 +681,6 @@ namespace ImageCropTool
                 AdjustAspectRatio();
             else
                 UpdateAllTextBoxes();
-        }
-
-        private int ComputeKWithDirection(int targetPx, int reducedDim, int currentPx, int currentOutputDim)
-        {
-            // targetPx: the pixel value the user typed (converted)
-            // reducedDim: the reduced ratio dimension (rw or rh)
-            // currentPx: the previous pixel value for the changed dimension
-            // currentOutputDim: the current output dimension (width or height) before change
-
-            double kDouble = (double)targetPx / reducedDim;
-            int k;
-            if (targetPx > currentPx) // user increased the value
-                k = (int)Math.Ceiling(kDouble);
-            else if (targetPx < currentPx) // user decreased the value
-                k = (int)Math.Floor(kDouble);
-            else // no change, keep current
-                k = (int)Math.Round((double)currentOutputDim / reducedDim);
-            return Math.Max(1, k);
         }
 
         private void WidthBox_LostFocus(object sender, RoutedEventArgs e)
@@ -880,6 +751,7 @@ namespace ImageCropTool
                 {
                     SetSourceDimensions(dims.Value.width, dims.Value.height);
                     AppendLog($"Loaded dimensions: {dims.Value.width} × {dims.Value.height} px\n");
+                    LoadPreviewImage(path);
                 }
                 else
                 {
@@ -902,6 +774,7 @@ namespace ImageCropTool
                         {
                             SetSourceDimensions(dims.Value.width, dims.Value.height);
                             AppendLog($"Using first image: {System.IO.Path.GetFileName(files[0])} ({dims.Value.width} × {dims.Value.height} px)\n");
+                            LoadPreviewImage(files[0]);
                         }
                         else
                         {
@@ -924,54 +797,15 @@ namespace ImageCropTool
         {
             if (sourceWidthPx <= 0 || sourceHeightPx <= 0) return;
 
-            double imgWidth = PreviewImage.ActualWidth;
-            double imgHeight = PreviewImage.ActualHeight;
+            // Get scale 
+            var scale = GetScale();
 
-            double scaleX, scaleY, scale;
-            double offsetX = 0, offsetY = 0;
-
-            if (imgWidth > 0 && imgHeight > 0)
-            {
-                // Image is loaded – use its actual size
-                scaleX = imgWidth / sourceWidthPx;
-                scaleY = imgHeight / sourceHeightPx;
-                scale = Math.Min(scaleX, scaleY);
-                // Image is centered, so offset is 0 because the image's top-left is (0,0) in the Canvas
-                // (the Canvas contains only the image, so it's at (0,0))
-            }
-            else
-            {
-                // No image loaded – fall back to Canvas size and default source dimensions
-                double canvasWidth = PreviewCanvas.ActualWidth;
-                double canvasHeight = PreviewCanvas.ActualHeight;
-                if (canvasWidth <= 0 || canvasHeight <= 0)
-                {
-                    // If Canvas size is also zero (e.g., not yet rendered), just use scale=1 and no offset
-                    scale = 1.0;
-                    offsetX = 0;
-                    offsetY = 0;
-                }
-                else
-                {
-                    scaleX = canvasWidth / sourceWidthPx;
-                    scaleY = canvasHeight / sourceHeightPx;
-                    scale = Math.Min(scaleX, scaleY);
-                    // Center the overlay in the canvas
-                    offsetX = (canvasWidth - sourceWidthPx * scale) / 2;
-                    offsetY = (canvasHeight - sourceHeightPx * scale) / 2;
-                }
-            }
-
-            if (scale <= 0 || double.IsInfinity(scale) || double.IsNaN(scale))
-                scale = 1.0;
-
-            // Apply scale and offset to the overlay
+            // Apply scale and offset
             CropOverlay.Width = Math.Max(1, outputWidthPx * scale);
             CropOverlay.Height = Math.Max(1, outputHeightPx * scale);
-            Canvas.SetLeft(CropOverlay, marginLeftPx * scale + offsetX);
-            Canvas.SetTop(CropOverlay, marginTopPx * scale + offsetY);
+            Canvas.SetLeft(CropOverlay, marginLeftPx * scale);
+            Canvas.SetTop(CropOverlay, marginTopPx * scale);
         }
-
         private void ResetBtn_Click(object sender, RoutedEventArgs e)
         {
             // Reset output dimensions to the current source dimensions
@@ -1018,19 +852,224 @@ namespace ImageCropTool
                 HeightBox.Maximum = 99999;
             }
         }
-        private void ClampOutputToSource()
-        {
-            if (ActionCrop.IsChecked == true)
-            {
-                if (outputWidthPx > sourceWidthPx) outputWidthPx = sourceWidthPx;
-                if (outputHeightPx > sourceHeightPx) outputHeightPx = sourceHeightPx;
-                UpdateAllTextBoxes(); // refresh UI
-            }
-        }
+
         private void AppendLog(string text)
         {
             LogTextBox.AppendText(text);
             LogTextBox.ScrollToEnd();
         }
+
+        private void LoadPreviewImage(string filePath)
+        {
+            try
+            {
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.UriSource = new Uri(filePath);
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.DecodePixelWidth = 0; // full resolution
+                bitmap.EndInit();
+                bitmap.Freeze(); // makes it cross-thread safe
+                PreviewImage.Source = bitmap;
+                _currentImagePath = filePath;
+            }
+            catch (Exception ex)
+            {
+                PreviewImage.Source = null;
+                AppendLog($"Failed to load preview: {ex.Message}\n");
+            }
+        }
+
+        private (int w, int h) FindBestAspectRatioPair(int targetW, int targetH, int sourceW, int sourceH, int searchRadius = 5)
+        {
+            double bestCost = double.MaxValue;
+            int bestW = Math.Max(1, targetW);
+            int bestH = Math.Max(1, targetH);
+
+            int startW = Math.Max(1, targetW - searchRadius);
+            int endW = targetW + searchRadius;
+
+            for (int w = startW; w <= endW; w++)
+            {
+                int h = (int)Math.Round((double)w * sourceH / sourceW);
+                if (h < 1) h = 1;
+
+                // Cost: sum of absolute differences from targets
+                double cost = Math.Abs(w - targetW) + Math.Abs(h - targetH);
+                if (cost < bestCost)
+                {
+                    bestCost = cost;
+                    bestW = w;
+                    bestH = h;
+                }
+            }
+
+            // Clamp to source if Crop mode (optional, but will be handled later)
+            return (bestW, bestH);
+        }
+        private double GetScale()
+        {
+            if (sourceWidthPx <= 0 || sourceHeightPx <= 0) return (1);
+
+            double displayWidth = PreviewCanvas.ActualWidth;
+            double displayHeight = PreviewCanvas.ActualHeight;
+            if (displayWidth <= 0 || displayHeight <= 0)
+            {
+                displayWidth = 600;
+                displayHeight = 600;
+            }
+
+            double scaleX = displayWidth / sourceWidthPx;
+            double scaleY = displayHeight / sourceHeightPx;
+            double scale = Math.Min(scaleX, scaleY);
+            if (scale <= 0 || double.IsInfinity(scale) || double.IsNaN(scale))
+                scale = 1.0;
+
+            return (scale);
+        }
+        private void CropOverlay_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.LeftButton != MouseButtonState.Pressed) return;
+            if (ActionResize.IsChecked == true) return; // disable in Resize mode
+            CropOverlay.CaptureMouse();
+            Point pos = e.GetPosition(PreviewCanvas);
+            double left = Canvas.GetLeft(CropOverlay);
+            double top = Canvas.GetTop(CropOverlay);
+            double right = left + CropOverlay.Width;
+            double bottom = top + CropOverlay.Height;
+            double tolerance = EdgeTolerance;
+
+            bool nearLeft = Math.Abs(pos.X - left) < tolerance;
+            bool nearRight = Math.Abs(pos.X - right) < tolerance;
+            bool nearTop = Math.Abs(pos.Y - top) < tolerance;
+            bool nearBottom = Math.Abs(pos.Y - bottom) < tolerance;
+
+            // Determine resize mode: only edges, no corners
+            if (nearLeft) _resizeMode = "ResizeLeft";
+            else if (nearRight) _resizeMode = "ResizeRight";
+            else if (nearTop) _resizeMode = "ResizeTop";
+            else if (nearBottom) _resizeMode = "ResizeBottom";
+            else _resizeMode = "Drag";
+
+            _isManipulating = true;
+            _startMousePos = pos;
+            _startMarginLeftPx = marginLeftPx;
+            _startMarginTopPx = marginTopPx;
+            _startWidthPx = outputWidthPx;
+            _startHeightPx = outputHeightPx;
+
+            e.Handled = true;
+        }
+
+        private void CropOverlay_MouseMove(object sender, MouseEventArgs e)
+        {
+            Point pos = e.GetPosition(PreviewCanvas);
+
+            if (!_isManipulating)
+            {
+                // Update cursor based on position
+                double left = Canvas.GetLeft(CropOverlay);
+                double top = Canvas.GetTop(CropOverlay);
+                double right = left + CropOverlay.Width;
+                double bottom = top + CropOverlay.Height;
+                double tolerance = EdgeTolerance;
+
+                bool nearLeft = Math.Abs(pos.X - left) < tolerance;
+                bool nearRight = Math.Abs(pos.X - right) < tolerance;
+                bool nearTop = Math.Abs(pos.Y - top) < tolerance;
+                bool nearBottom = Math.Abs(pos.Y - bottom) < tolerance;
+
+                if (nearLeft) Cursor = Cursors.SizeWE;
+                else if (nearRight) Cursor = Cursors.SizeWE;
+                else if (nearTop) Cursor = Cursors.SizeNS;
+                else if (nearBottom) Cursor = Cursors.SizeNS;
+                else Cursor = Cursors.Hand;
+                return;
+            }
+
+            // --- Manipulation ---
+            if (ActionResize.IsChecked == true) return;
+
+            var scale = GetScale();
+            double invScale = 1.0 / scale;
+            double deltaX = (pos.X - _startMousePos.X) * invScale;
+            double deltaY = (pos.Y - _startMousePos.Y) * invScale;
+
+            int newMarginLeft = _startMarginLeftPx;
+            int newMarginTop = _startMarginTopPx;
+            int newWidth = _startWidthPx;
+            int newHeight = _startHeightPx;
+
+            switch (_resizeMode)
+            {
+                case "Drag":
+                    // Move overlay: only margins change; size unchanged
+                    newMarginLeft = (int)Math.Round(_startMarginLeftPx + deltaX);
+                    newMarginTop = (int)Math.Round(_startMarginTopPx + deltaY);
+                    // Clamp margins so the overlay stays inside the source image
+                    newMarginLeft = Clamp(newMarginLeft, 0, sourceWidthPx - newWidth);
+                    newMarginTop = Clamp(newMarginTop, 0, sourceHeightPx - newHeight);
+                    break;
+
+                case "ResizeLeft":
+                    // Only horizontal movement matters
+                    newMarginLeft = (int)Math.Round(_startMarginLeftPx + deltaX);
+                    // Width changes inversely: newWidth = _startWidthPx - (newMarginLeft - _startMarginLeftPx)
+                    newWidth = _startWidthPx - (newMarginLeft - _startMarginLeftPx);
+                    // Clamp
+                    if (newMarginLeft < 0) { newWidth += newMarginLeft; newMarginLeft = 0; }
+                    if (newWidth < 1) { newWidth = 1; newMarginLeft = Math.Min(newMarginLeft, sourceWidthPx - 1); }
+                    if (newMarginLeft + newWidth > sourceWidthPx) newWidth = sourceWidthPx - newMarginLeft;
+                    break;
+
+                case "ResizeRight":
+                    // Only horizontal movement matters
+                    newWidth = (int)Math.Round(_startWidthPx + deltaX);
+                    if (newWidth < 1) newWidth = 1;
+                    if (newMarginLeft + newWidth > sourceWidthPx) newWidth = sourceWidthPx - newMarginLeft;
+                    break;
+
+                case "ResizeTop":
+                    // Only vertical movement matters
+                    newMarginTop = (int)Math.Round(_startMarginTopPx + deltaY);
+                    newHeight = _startHeightPx - (newMarginTop - _startMarginTopPx);
+                    if (newMarginTop < 0) { newHeight += newMarginTop; newMarginTop = 0; }
+                    if (newHeight < 1) { newHeight = 1; newMarginTop = Math.Min(newMarginTop, sourceHeightPx - 1); }
+                    if (newMarginTop + newHeight > sourceHeightPx) newHeight = sourceHeightPx - newMarginTop;
+                    break;
+
+                case "ResizeBottom":
+                    // Only vertical movement matters
+                    newHeight = (int)Math.Round(_startHeightPx + deltaY);
+                    if (newHeight < 1) newHeight = 1;
+                    if (newMarginTop + newHeight > sourceHeightPx) newHeight = sourceHeightPx - newMarginTop;
+                    break;
+            }
+
+            // Apply changes
+            marginLeftPx = newMarginLeft;
+            marginTopPx = newMarginTop;
+            outputWidthPx = newWidth;
+            outputHeightPx = newHeight;
+
+            UpdateAllTextBoxes();
+            e.Handled = true;
+        }
+
+        private void CropOverlay_MouseUp(object sender, MouseButtonEventArgs e)
+        {
+            if (_isManipulating)
+            {
+                _isManipulating = false;
+                _resizeMode = "";
+                CropOverlay.ReleaseMouseCapture();
+                Cursor = Cursors.Arrow;
+                e.Handled = true;
+            }
+        }
+        private int Clamp(int value, int min, int max) => value < min ? min : (value > max ? max : value);
+
+        private const double EdgeTolerance = 12.0;
     }
+
 }

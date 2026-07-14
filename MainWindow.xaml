@@ -107,19 +107,9 @@
                      LostFocus="SrcBox_LostFocus"
                      TextChanged="SrcBox_TextChanged" FontStyle="Italic" FontWeight="Bold"/>
                 <Button Grid.Column="1" Content="Browse" Width="50" Height="25" Click="SrcBrowse_Click" />
-            </Grid>
-
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <DockPanel Grid.Column="0" LastChildFill="False" >
-                    <Label Content="Output folder:" FontWeight="Bold" Margin="0,0,0,0" HorizontalAlignment="Left"/>
-                    <CheckBox Grid.Column="1" x:Name="OpenAfterChk" IsChecked="True" DockPanel.Dock="Right"                         VerticalAlignment="Center" Margin="0,3,0,0"  HorizontalAlignment="Right" />
-                    <TextBlock Grid.Column="1" Text="Open folder when done"  TextAlignment="Right" Margin="0,0,3,0" VerticalAlignment="Center" HorizontalAlignment="Right"  DockPanel.Dock="Right"/>
-                </DockPanel>
-            </Grid>
+            </Grid>           
+            <Label Content="Output folder:" FontWeight="Bold" Margin="0,0,0,0" HorizontalAlignment="Left"/>
+            
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -128,6 +118,15 @@
                 <TextBox x:Name="DstBox" Grid.Column="0" Margin="0,0,5,0" Text="Write/Paste or Browse if different from Source folder ------->" VerticalContentAlignment="Center" FontStyle="Italic" Foreground="MediumPurple" FontWeight="Bold"/>
                 <Button Grid.Column="1" Content="Browse" Width="50" Height="25" Click="DstBrowse_Click" />
             </Grid>
+
+            <DockPanel Grid.Column="0" LastChildFill="False" >
+                <CheckBox Grid.Column="1" x:Name="OpenAfterChk" IsChecked="True" DockPanel.Dock="Right"                         VerticalAlignment="Center" Margin="0,8,0,0"  HorizontalAlignment="Right">
+                <CheckBox.LayoutTransform>
+                    <ScaleTransform ScaleX="1.25" ScaleY="1.25" />
+                </CheckBox.LayoutTransform>
+                </CheckBox>
+                <TextBlock Grid.Column="1" Text="Open folder when done"  TextAlignment="Right" Margin="0,5,5,0" VerticalAlignment="Center" HorizontalAlignment="Right"  DockPanel.Dock="Right"/>
+            </DockPanel>
 
             <Separator Margin="0,5,0,0" />
 
@@ -200,9 +199,9 @@
                         <TextBlock Text="Units" FontWeight="Bold" FontSize="14" />
                     </GroupBox.Header>
                     <StackPanel Orientation="Horizontal">
-                        <RadioButton x:Name="UnitPixels" Content="Pixels" IsChecked="True" Margin="5"/>
-                        <RadioButton x:Name="UnitMM" Content="Millimeters" Margin="5"/>
-                        <RadioButton x:Name="UnitPer" Content="Percentage" Margin="5"/>
+                        <RadioButton x:Name="UnitPixels" Content="Pixels" IsChecked="True" Margin="5" GroupName="UnitGroup" />
+                        <RadioButton x:Name="UnitMM" Content="Millimeters" Margin="5" GroupName="UnitGroup" />
+                        <RadioButton x:Name="UnitPer" Content="Percentage" Margin="5" GroupName="UnitGroup" />
                     </StackPanel>
                 </GroupBox>
             </Grid>
@@ -321,17 +320,17 @@
                     <!-- LogTextBox - takes remaining space -->
                 </Grid.RowDefinitions>
 
-                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,5">
-                    <Button x:Name="ResetBtn" Content="Reset settings" Width="90" Height="30" Margin="0,0,0,0" />
-                    <Button x:Name="CancelBtn" Content="Cancel" Width="80" Height="30" IsEnabled="False" Margin="130,0,0,0"/>
-                    <Button x:Name="CropBtn" Content="CROP IMAGES" Width="100" Height="30" Margin="10,0,0,0" Background="LightGreen" />
-                </StackPanel>
+                <DockPanel Grid.Row="0" Margin="0,0,0,5">
+                    <Button x:Name="ResetBtn" Content="Reset settings" Width="90" Height="30" Margin="0,0,0,0" DockPanel.Dock="Left"/>
+                    <Button x:Name="CropBtn" Content="CROP IMAGES" Width="100" Height="30" Margin="0,0,0,0" Background="LightGreen" DockPanel.Dock="Right"/>
+                    <Button x:Name="CancelBtn" Content="Cancel" Width="80" Height="30" IsEnabled="False" Margin="130,0,0,0" DockPanel.Dock="Right"/>                    
+                </DockPanel>
 
                 <ProgressBar x:Name="Progress" Grid.Row="1" Height="20" Margin="0,0,0,5" />
 
                 <TextBox x:Name="LogTextBox" Grid.Row="2" IsReadOnly="True" 
                          TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" 
-                         Background="LightGray" MaxHeight="230"/>
+                         Background="LightGray" MaxHeight="200"/>
             </Grid>
         </StackPanel>
 
@@ -355,14 +354,14 @@
                 <!-- Preview Canvas -->
                 <Border BorderBrush="DarkGray" BorderThickness="1" Background="LightGray" CornerRadius="5" Width="620" Height="620">
                     <Canvas x:Name="PreviewCanvas" Background="LightGray" Margin="1" Width="600" Height="600">
-                        <Image x:Name="PreviewImage" Stretch="Uniform"/>
+                        <Image x:Name="PreviewImage" Stretch="Uniform" Width="600" Height="600" HorizontalAlignment="Left" VerticalAlignment="Top"/>
 
                         <!-- Crop overlay (static position for now) -->
                         <Border x:Name="CropOverlay" 
                                 BorderBrush="Red" BorderThickness="2" 
                                 Background="#50FF0000" Visibility="Visible"
                                 Width="200" Height="150" 
-                                Canvas.Left="100" Canvas.Top="100" />
+                                Canvas.Left="30" Canvas.Top="20" />
                     </Canvas>
                 </Border>
             </DockPanel>
