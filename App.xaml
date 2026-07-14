@@ -4,6 +4,145 @@
              xmlns:local="clr-namespace:ImageCropTool"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-         
+
+        <!-- Toolbar buttons (Orange) -->
+        <Style x:Key="ToolbarButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#F4A300"/>
+            <Setter Property="BorderBrush" Value="#D97904"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="BorderThickness" Value="3"/>
+            <Setter Property="Padding" Value="4,4"/>
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+
+                        <Border x:Name="border"
+                            CornerRadius="6"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}">
+
+                            <ContentPresenter
+                            Margin="{TemplateBinding Padding}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"/>
+                        </Border>
+
+                        <ControlTemplate.Triggers>
+
+                            <!-- Hover -->
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border"
+                                    Property="Background"
+                                    Value="#FFC14D"/>
+                            </Trigger>
+
+                            <!-- Pressed -->
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border"
+                                    Property="Background"
+                                    Value="#E08A00"/>
+                                <Setter TargetName="border"
+                                    Property="BorderBrush"
+                                    Value="#A85B00"/>
+                            </Trigger>
+
+                            <!-- Disabled -->
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="border"
+                                    Property="Opacity"
+                                    Value="0.45"/>
+                            </Trigger>
+
+                            <!-- Keyboard focus -->
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="border"
+                                    Property="BorderThickness"
+                                    Value="2"/>
+                                <Setter TargetName="border"
+                                    Property="BorderBrush"
+                                    Value="#0078D7"/>
+                            </Trigger>
+
+                        </ControlTemplate.Triggers>
+
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+
+        <!-- Blue action buttons -->
+        <Style x:Key="ActionButtonStyle"
+           TargetType="Button">
+
+            <Setter Property="Background" Value="#2196F3"/>
+            <Setter Property="BorderBrush" Value="#1976D2"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="3"/>
+            <Setter Property="Padding" Value="4,4"/>
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+
+                        <Border x:Name="border"
+                            CornerRadius="6"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}">
+
+                            <ContentPresenter
+                            Margin="{TemplateBinding Padding}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"/>
+                        </Border>
+
+                        <ControlTemplate.Triggers>
+
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border"
+                                    Property="Background"
+                                    Value="LightGreen"/>
+                            </Trigger>
+
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border"
+                                    Property="Background"
+                                    Value="#1565C0"/>
+                                <Setter TargetName="border"
+                                    Property="BorderBrush"
+                                    Value="#0D47A1"/>
+                            </Trigger>
+
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="border"
+                                    Property="Opacity"
+                                    Value="0.45"/>
+                            </Trigger>
+
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="border"
+                                    Property="BorderThickness"
+                                    Value="2"/>
+                                <Setter TargetName="border"
+                                    Property="BorderBrush"
+                                    Value="White"/>
+                            </Trigger>
+
+                        </ControlTemplate.Triggers>
+
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
     </Application.Resources>
 </Application>

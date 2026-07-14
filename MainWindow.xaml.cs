@@ -52,7 +52,6 @@ namespace ImageCropTool
             ResetBtn.Click += ResetBtn_Click;
             PreviewImage.SizeChanged += (s, e) => UpdateCropOverlay();
             PreviewImage.Loaded += (s, e) => UpdateCropOverlay();
-            PreviewImage.Loaded += (s, e) => UpdateCropOverlay();
             CropOverlay.MouseDown += CropOverlay_MouseDown;
             CropOverlay.MouseMove += CropOverlay_MouseMove;
             CropOverlay.MouseUp += CropOverlay_MouseUp;
@@ -749,6 +748,12 @@ namespace ImageCropTool
                 var dims = GetImageDimensions(path);
                 if (dims.HasValue)
                 {
+                    int? orientation = GetExifOrientation(path);
+                    if (orientation.HasValue)
+                        AppendLog($"EXIF Orientation value: {orientation.Value}\n");
+                    else
+                        AppendLog("No EXIF orientation metadata found.\n"); 
+                    
                     SetSourceDimensions(dims.Value.width, dims.Value.height);
                     AppendLog($"Loaded dimensions: {dims.Value.width} × {dims.Value.height} px\n");
                     LoadPreviewImage(path);
@@ -1070,6 +1075,26 @@ namespace ImageCropTool
         private int Clamp(int value, int min, int max) => value < min ? min : (value > max ? max : value);
 
         private const double EdgeTolerance = 12.0;
+
+        private int? GetExifOrientation(string filePath)
+        {
+            try
+            {
+                using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.None, BitmapCacheOption.None);
+                var metadata = decoder.Frames[0].Metadata as BitmapMetadata;
+                if (metadata == null) return null;
+
+                if (metadata.ContainsQuery("/ifd/{ushort=274}"))
+                    return Convert.ToInt32(metadata.GetQuery("/ifd/{ushort=274}"));
+                if (metadata.ContainsQuery("/app1/ifd/{ushort=274}"))
+                    return Convert.ToInt32(metadata.GetQuery("/app1/ifd/{ushort=274}"));
+                if (metadata.ContainsQuery("/ifd/exif/{ushort=274}"))
+                    return Convert.ToInt32(metadata.GetQuery("/ifd/exif/{ushort=274}"));
+            }
+            catch { }
+            return null;
+        }
     }
 
 }
