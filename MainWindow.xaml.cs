@@ -71,6 +71,9 @@ namespace ImageCropTool
             FitBtn.Click += FitBtn_Click;
             ActualSizebtn.Click += ActualSizeBtn_Click;
             PanModeBtn.Click += PanModeBtn_Click;
+            HScrollBar.ValueChanged += HScrollBar_ValueChanged;
+            VScrollBar.ValueChanged += VScrollBar_ValueChanged;
+            PreviewBorder.MouseWheel += PreviewArea_MouseWheel;
         }
 
         private enum ZoomMode { Fit, Actual, Custom }
@@ -78,6 +81,8 @@ namespace ImageCropTool
         private double _customZoom = 1.0;
         private double _currentScale = 1.0;
         private double _panX = 0, _panY = 0;
+        private double _minPanX = 0, _maxPanX = 0, _minPanY = 0, _maxPanY = 0;
+        private bool _suppressScrollSync = false;
         private bool _isPanMode = false;
         private bool _isPanning = false;
         private Point _panStartMouse;
@@ -93,6 +98,7 @@ namespace ImageCropTool
                 PreviewCanvas.RenderTransform = null;
                 _currentScale = 1.0;
                 UpdateZoomLabel();
+                ResetScrollBars();
                 return;
             }
 
@@ -127,17 +133,26 @@ namespace ImageCropTool
 
             _currentScale = scale;
 
-            // --- Clamp panning so the image can't be dragged completely out of view ---
+            // --- Clamp panning so the image can't be dragged out of view ---
+            // Content can only be panned when it's larger than the viewport on that
+            // axis; if it already fits entirely, pan is locked to 0 (top-left aligned,
+            // nothing to scroll) - just like a normal scrollbar disables itself when
+            // there's nothing to scroll.
             double scaledW = sourceWidthPx * scale;
             double scaledH = sourceHeightPx * scale;
 
-            double minPanX = Math.Min(0, canvasW - scaledW);
-            double maxPanX = Math.Max(0, canvasW - scaledW);
-            double minPanY = Math.Min(0, canvasH - scaledH);
-            double maxPanY = Math.Max(0, canvasH - scaledH);
+            double minPanX = scaledW > canvasW ? (canvasW - scaledW) : 0;
+            double maxPanX = 0;
+            double minPanY = scaledH > canvasH ? (canvasH - scaledH) : 0;
+            double maxPanY = 0;
+
+            _minPanX = minPanX; _maxPanX = maxPanX;
+            _minPanY = minPanY; _maxPanY = maxPanY;
 
             _panX = Clamp(_panX, minPanX, maxPanX);
             _panY = Clamp(_panY, minPanY, maxPanY);
+
+            UpdateScrollBars(canvasW, canvasH, scaledW, scaledH);
 
             // --- CHANGE: No centering – image is top-left aligned ---
             double totalX = _panX;   // pan offsets only (initialized to 0)
@@ -157,6 +172,66 @@ namespace ImageCropTool
 
             UpdateZoomLabel();
             UpdateCropOverlay();
+        }
+
+        private void UpdateScrollBars(double canvasW, double canvasH, double scaledW, double scaledH)
+        {
+            _suppressScrollSync = true;
+
+            // maxPanX/maxPanY are always 0 (top-left aligned default), so Value = -pan.
+            double hRange = -_minPanX;
+            HScrollBar.Minimum = 0;
+            HScrollBar.Maximum = hRange;
+            HScrollBar.ViewportSize = canvasW;
+            HScrollBar.Value = Clamp(-_panX, 0, hRange);
+
+            double vRange = -_minPanY;
+            VScrollBar.Minimum = 0;
+            VScrollBar.Maximum = vRange;
+            VScrollBar.ViewportSize = canvasH;
+            VScrollBar.Value = Clamp(-_panY, 0, vRange);
+
+            _suppressScrollSync = false;
+        }
+
+        private void ResetScrollBars()
+        {
+            _suppressScrollSync = true;
+            HScrollBar.Minimum = 0; HScrollBar.Maximum = 0; HScrollBar.Value = 0;
+            VScrollBar.Minimum = 0; VScrollBar.Maximum = 0; VScrollBar.Value = 0;
+            _suppressScrollSync = false;
+        }
+
+        private void HScrollBar_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_suppressScrollSync || _originalImage == null) return;
+            _panX = -HScrollBar.Value;
+            UpdatePreviewTransform();
+        }
+
+        private void VScrollBar_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_suppressScrollSync || _originalImage == null) return;
+            _panY = -VScrollBar.Value;
+            UpdatePreviewTransform();
+        }
+
+        private void PreviewArea_MouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (_originalImage == null) return;
+
+            double step = e.Delta; // typically +/-120 per notch
+
+            if (Keyboard.Modifiers == ModifierKeys.Shift)
+            {
+                HScrollBar.Value = Clamp(HScrollBar.Value - step, HScrollBar.Minimum, HScrollBar.Maximum);
+            }
+            else
+            {
+                VScrollBar.Value = Clamp(VScrollBar.Value - step, VScrollBar.Minimum, VScrollBar.Maximum);
+            }
+
+            e.Handled = true;
         }
         private BitmapSource? _originalImage = null;   // the raw image (no rotation)
         private double _currentRotation = 0;
@@ -899,6 +974,16 @@ namespace ImageCropTool
         }
         private void ResetAll_Click(object sender, RoutedEventArgs e)
         {
+            var result = System.Windows.MessageBox.Show(
+                "This will clear the loaded image and reset all settings to their defaults. Continue?",
+                "Reset Everything",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                MessageBoxResult.No);
+
+            if (result != MessageBoxResult.Yes)
+                return;
+
             // Reset source and destination text boxes
             SrcBox.Text = AppConstants.DefaultSrcBoxText;
             SrcBox.FlowDirection = FlowDirection.LeftToRight;
