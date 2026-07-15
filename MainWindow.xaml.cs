@@ -42,7 +42,6 @@ namespace ImageCropTool
             ModeSuffix.Checked += ModeSuffix_Checked;
             NoOverwriteChk.Checked += NoOverwrite_CheckedChanged;
             NoOverwriteChk.Unchecked += NoOverwrite_CheckedChanged;
-            PreviewArea.IsEnabled = false; 
             PreviewCanvas.MouseLeave += (s, e) => Cursor = Cursors.Arrow;
             PreviewImage.Loaded += (s, e) => UpdateCropOverlay();
             PreviewImage.SizeChanged += (s, e) => UpdateCropOverlay();
@@ -115,11 +114,11 @@ namespace ImageCropTool
             // All filename controls should be enabled only when NoOverwriteChk is checked
             bool isEnabled = NoOverwriteChk.IsChecked == true;
           
-            ModePrefix.IsEnabled = isEnabled;
-            ModeSuffix.IsEnabled = isEnabled;
-            NameBox.IsEnabled = isEnabled;
+            ModePrefix.IsEnabled = !isEnabled;
+            ModeSuffix.IsEnabled = !isEnabled;
+            NameBox.IsEnabled = !isEnabled;
 
-            if (isEnabled)
+            if (!isEnabled)
             {
                 LayoutPositioning();
             }
@@ -329,6 +328,8 @@ namespace ImageCropTool
                 SrcBox.TextAlignment = TextAlignment.Left;
                 SrcBox.HorizontalContentAlignment = HorizontalAlignment.Left;
                 PreviewImage.Source = null;   // <-- clear preview
+                _originalImage = null;
+                CropOverlay.Visibility = Visibility.Hidden;   // <-- hide overlay
                 return;
             }
 
@@ -742,16 +743,24 @@ namespace ImageCropTool
         }
         private void UpdateCropOverlay()
         {
-            if (sourceWidthPx <= 0 || sourceHeightPx <= 0) return;
+            if (sourceWidthPx <= 0 || sourceHeightPx <= 0 || _originalImage == null)
+            {
+                CropOverlay.Visibility = Visibility.Collapsed;
+                return;
+            }
 
-            // Get scale 
-            var scale = GetScale();
+            double scale = GetScale();
 
-            // Apply scale and offset
+            // Overlay is already in the current image pixel space (rotated if needed)
             CropOverlay.Width = Math.Max(1, outputWidthPx * scale);
             CropOverlay.Height = Math.Max(1, outputHeightPx * scale);
             Canvas.SetLeft(CropOverlay, marginLeftPx * scale);
             Canvas.SetTop(CropOverlay, marginTopPx * scale);
+
+            // Do NOT rotate the overlay border – it stays axis‑aligned (bounding box)
+            CropOverlay.RenderTransform = null;
+
+            CropOverlay.Visibility = Visibility.Visible;
         }
         private void ResetBtn_Click(object sender, RoutedEventArgs e)
         {
@@ -771,7 +780,7 @@ namespace ImageCropTool
             // Reset filename settings
             userCustomText = null;          // clear any custom text
             ModePrefix.IsChecked = true;    // default to Prefix
-            NoOverwriteChk.IsChecked = true;
+            NoOverwriteChk.IsChecked = false;
 
             // Force UI refresh (this also updates the crop overlay)
             UpdateAllTextBoxes();
@@ -823,22 +832,18 @@ namespace ImageCropTool
 
                 _originalImage = bitmap;
                 _currentRotation = 0;
+                _previousRotation = 0;
 
-                // ✅ Read dimensions from the loaded bitmap
                 int w = bitmap.PixelWidth;
                 int h = bitmap.PixelHeight;
-                SetSourceDimensions(w, h);          // update UI with the correct dimensions
-
-                UpdateDisplayedImage();              // applies rotation (0°) and shows it
+                SetSourceDimensions(w, h);
+                UpdateDisplayedImage();
                 _currentImagePath = filePath;
-                PreviewArea.IsEnabled = true;
                 CropOverlay.Visibility = Visibility.Visible;
-                AppendLog($"Loaded dimensions: {w} × {h} px\n");
             }
             catch (Exception ex)
             {
                 PreviewImage.Source = null;
-                PreviewArea.IsEnabled = false;
                 CropOverlay.Visibility = Visibility.Hidden;
                 AppendLog($"Failed to load preview: {ex.Message}\n");
             }
@@ -847,6 +852,35 @@ namespace ImageCropTool
         {
             if (_originalImage == null) return;
 
+            // Store the old dimensions (before rotation)
+            int oldW = sourceWidthPx;
+            int oldH = sourceHeightPx;
+
+            // Compute new dimensions after rotation
+            int w = _originalImage.PixelWidth;
+            int h = _originalImage.PixelHeight;
+            double angle = _currentRotation % 360;
+            if (angle < 0) angle += 360;
+
+            bool shouldSwap = Math.Abs(angle - 90) < 0.1 || Math.Abs(angle - 270) < 0.1;
+            if (shouldSwap)
+            {
+                w = _originalImage.PixelHeight;
+                h = _originalImage.PixelWidth;
+            }
+
+            // Apply the rotation to the crop rectangle (if the angle changed)
+            double deltaAngle = _currentRotation - _previousRotation;
+            if (Math.Abs(deltaAngle) > 0.1)
+            {
+                TransformCropRectangle(deltaAngle, oldW, oldH);
+                _previousRotation = _currentRotation;
+            }
+
+            // Update source dimensions (used for scaling and max values)
+            SetSourceDimensions(w, h);
+
+            // Rotate the image itself (TransformedBitmap)
             BitmapSource display = _originalImage;
             if (Math.Abs(_currentRotation % 360) > 0.001)
             {
@@ -854,20 +888,7 @@ namespace ImageCropTool
                 display = new TransformedBitmap(_originalImage, transform);
                 display.Freeze();
             }
-
             PreviewImage.Source = display;
-
-            // Compute new effective dimensions after rotation
-            int w = _originalImage.PixelWidth;
-            int h = _originalImage.PixelHeight;
-            double angle = _currentRotation % 360;
-            if (Math.Abs(angle) > 0.1 && Math.Abs(angle - 180) > 0.1) // 90 or 270
-            {
-                w = _originalImage.PixelHeight;
-                h = _originalImage.PixelWidth;
-            }
-
-            SetSourceDimensions(w, h);   // updates sourceWidthPx / sourceHeightPx and the UI
         }
         private (int w, int h) FindBestAspectRatioPair(int targetW, int targetH, int sourceW, int sourceH, int searchRadius = 5)
         {
@@ -1208,6 +1229,40 @@ namespace ImageCropTool
             ClampCropRectangle();
             UpdateMaxValues();
             UpdateAllTextBoxes();
+        }
+        private double _previousRotation = 0;
+        private void TransformCropRectangle(double deltaAngle, int oldW, int oldH)
+        {
+            // deltaAngle should be one of: 90, -90, 180 (or 0)
+            double angle = deltaAngle % 360;
+            if (angle < 0) angle += 360;
+
+            double left = marginLeftPx;
+            double top = marginTopPx;
+            double width = outputWidthPx;
+            double height = outputHeightPx;
+
+            if (Math.Abs(angle - 90) < 0.1) // +90° clockwise
+            {
+                marginLeftPx = (int)Math.Round(oldH - top - height);
+                marginTopPx = (int)Math.Round(left);
+                outputWidthPx = (int)Math.Round(height);
+                outputHeightPx = (int)Math.Round(width);
+            }
+            else if (Math.Abs(angle - 180) < 0.1) // 180°
+            {
+                marginLeftPx = (int)Math.Round(oldW - left - width);
+                marginTopPx = (int)Math.Round(oldH - top - height);
+                // width and height unchanged
+            }
+            else if (Math.Abs(angle - 270) < 0.1) // -90° (or 270° clockwise)
+            {
+                marginLeftPx = (int)Math.Round(top);
+                marginTopPx = (int)Math.Round(oldW - left - width);
+                outputWidthPx = (int)Math.Round(height);
+                outputHeightPx = (int)Math.Round(width);
+            }
+            // angle 0 → no change
         }
     }
 

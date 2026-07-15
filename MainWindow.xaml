@@ -78,8 +78,8 @@
             <ColumnDefinition Width="630" />
         </Grid.ColumnDefinitions>
 
-        <!-- Left panel (scrollable) -->
-        <StackPanel Margin="10,5,0,5">
+        <!-- Left panel -->
+        <StackPanel Margin="10,0,0,5">
             <Label Content="Source folder or file:" FontWeight="Bold" />
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -94,7 +94,7 @@
                      HorizontalContentAlignment="Left"
                      GotFocus="SrcBox_GotFocus"
                      LostFocus="SrcBox_LostFocus"
-                     TextChanged="SrcBox_TextChanged" FontStyle="Italic" FontWeight="Bold"/>
+                     TextChanged="SrcBox_TextChanged" FontStyle="Italic" FontWeight="Bold" TextWrapping="Wrap" Height="35"/>
                 <Button Grid.Column="1" Style="{StaticResource ActionButtonStyle}" Content="Browse" Click="SrcBrowse_Click" />
             </Grid>           
             <Label Content="Output folder:" FontWeight="Bold" Margin="0,0,0,0" HorizontalAlignment="Left"/>
@@ -104,48 +104,41 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBox x:Name="DstBox" Grid.Column="0" Margin="0,0,5,0" Text="Write/Paste or Browse if different from Source folder ------->" VerticalContentAlignment="Center" FontStyle="Italic" Foreground="MediumPurple" FontWeight="Bold"/>
+                <TextBox x:Name="DstBox" Grid.Column="0" Margin="0,0,5,0" Text="Write/Paste or Browse if different from Source folder ------>" VerticalContentAlignment="Center" FontStyle="Italic" Foreground="MediumPurple" FontWeight="Bold" TextWrapping="Wrap" Height="35"/>
                 <Button Grid.Column="1"  Style="{StaticResource ActionButtonStyle}" Content="Browse" Click="DstBrowse_Click" />
             </Grid>
 
-            <DockPanel Grid.Column="0" LastChildFill="False" >
-                <CheckBox Grid.Column="1" x:Name="OpenAfterChk" IsChecked="True" DockPanel.Dock="Right"                         VerticalAlignment="Center" Margin="0,8,0,0"  HorizontalAlignment="Right">
-                <CheckBox.LayoutTransform>
-                    <ScaleTransform ScaleX="1.25" ScaleY="1.25" />
-                </CheckBox.LayoutTransform>
-                </CheckBox>
-                <TextBlock Grid.Column="1" Text="Open folder when done"  TextAlignment="Right" Margin="0,5,5,0" VerticalAlignment="Center" HorizontalAlignment="Right"  DockPanel.Dock="Right"/>
-            </DockPanel>
+            <CheckBox x:Name="OpenAfterChk" IsChecked="True" VerticalAlignment="Center" Margin="5,5,0,0" HorizontalAlignment="Left" Content="Open folder when done" FontSize="13">
+            </CheckBox>
 
             <Separator Margin="0,5,0,0" />
 
             <!-- Filename Group (simplified) -->
-            <GroupBox Header="Output Filename" Margin="0,0,0,0">
+            <GroupBox Header="Output Filename" Margin="0,5,0,0" Height="65">
                 <Grid x:Name="NameGrid">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="70" />
+                        <ColumnDefinition Width="60" />
                         <ColumnDefinition Width="1" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
 
-                    <StackPanel Grid.RowSpan="2" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,5,0,0">
-                        <CheckBox x:Name="NoOverwriteChk" IsChecked="True" 
-                              HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,2">
+                    <StackPanel Grid.RowSpan="2" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="-3,2,0,0">
+                        <CheckBox x:Name="NoOverwriteChk" IsChecked="false" 
+                              HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,0">
                             <CheckBox.LayoutTransform>
-                                <ScaleTransform ScaleX="1.75" ScaleY="1.75" />
+                                <ScaleTransform ScaleX="1.5" ScaleY="1.5" />
                             </CheckBox.LayoutTransform>
                         </CheckBox>
-
-                        <TextBlock Text="Don't overwrite" TextWrapping="Wrap" TextAlignment="Center" FontSize="12" FontWeight="Bold" />
+                        <TextBlock Text="Overwrite" TextWrapping="Wrap" TextAlignment="Center" FontSize="12" FontWeight="Bold" />
                     </StackPanel>
 
-                    <Border Grid.RowSpan="3" Grid.Column="1" BorderBrush="LightGray" BorderThickness="1,0,0,0" Margin="0,2,0,2" Width="1" />
+                    <Border Grid.RowSpan="3" Grid.Column="1" BorderBrush="LightGray" BorderThickness="1" Margin="0,2,0,2" Width="1" />
 
-                    <StackPanel Orientation="Horizontal" Grid.Row="0" Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,0">
+                    <StackPanel Orientation="Horizontal" Grid.Row="0" Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-5,0,0">
                         <RadioButton x:Name="ModePrefix" IsChecked="True" Margin="0,0,0,0" FontSize="16" Content="Prefix" VerticalContentAlignment="center"/>
                         <RadioButton x:Name="ModeSuffix" Checked="ModeSuffix_Checked" Margin="40,0,0,0" FontSize="16" Content="Suffix" VerticalContentAlignment="center"/>
                     </StackPanel>
@@ -160,7 +153,7 @@
             </GroupBox>
 
             <Separator Margin="0,5,0,0" />
-            <Grid>
+            <Grid  Margin="0,5,0,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="20"/>
@@ -197,7 +190,7 @@
 
             <!-- Dimensions -->
 
-            <Grid >
+            <Grid  Margin="0,5,0,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
@@ -310,68 +303,76 @@
                     <Button x:Name="CropBtn" Content="CROP IMAGES" Width="100" Style="{StaticResource ActionButtonStyle}" Background="LightSeaGreen" DockPanel.Dock="Right"/>
                     <Button x:Name="CancelBtn" Content="Cancel" Style="{StaticResource ActionButtonStyle}" IsEnabled="False" DockPanel.Dock="Right"  Width="100" HorizontalAlignment="Right"/>                    
                 </DockPanel>
-
-                <ProgressBar x:Name="Progress" Grid.Row="1" Height="20" Margin="0,0,0,5" />
-
-                <TextBox x:Name="LogTextBox" Grid.Row="2" IsReadOnly="True" 
-                         TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" 
-                         Background="LightGray" MaxHeight="185"/>
             </Grid>
+            <ProgressBar x:Name="Progress" Height="20" Margin="0,0,0,5" />
+
+                <TextBox x:Name="LogTextBox" IsReadOnly="True" 
+                         TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" 
+                         Background="LightGray" MaxHeight="200" Padding="2"/>
+            
         </StackPanel>
 
         <!-- Right Panel (Preview) -->
-        <Grid Grid.Column="1" Margin="0,0,0,0">
-            <DockPanel x:Name="PreviewArea">
-                <!-- Toolbar at bottom -->
-                <Border DockPanel.Dock="Bottom" Background="White" BorderBrush="LightGray" BorderThickness="0"
-                        CornerRadius="5" Padding="0" Margin="5,0,5,0">
-                    <Grid >
+        <Grid Grid.Column="1" Margin="10,0,0,0">
+            <Line X1="0" Y1="0" X2="0" Y2="1" Stroke="Gray" StrokeThickness="1" HorizontalAlignment="Left"  VerticalAlignment="Stretch" Stretch="Fill" Margin="-7,0,0,0"/>
+            <Grid >
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="auto"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="auto"/>
+                    <RowDefinition Height="auto"/>
+                </Grid.RowDefinitions>
+                <Grid >
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="auto"/>
+                    </Grid.RowDefinitions>
+                    <GroupBox Margin="0,0,0,5" BorderBrush="Green" BorderThickness="2" Width="180" HorizontalAlignment="Left">
+                    <GroupBox.Header>
+                        <TextBlock Text="Rotate"  FontWeight="Bold" Foreground="Green" FontSize="14" Margin="0,0,0,0"/>
+                    </GroupBox.Header>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Stretch" VerticalAlignment="Center">
+                        <Button x:Name="RotateMore90" Content="↷ +90º"  Style="{StaticResource ToolbarButtonStyle}" Background="LightGreen" BorderBrush="Green" Cursor="Hand"/>
+                        <Button x:Name="RotateMinus90" Content="↶ -90º" Style="{StaticResource ToolbarButtonStyle}" Background="LightGreen" BorderBrush="Green" Cursor="Hand"/>
+                        <Button x:Name="Rotate180" Content="⟲ 180º" Style="{StaticResource ToolbarButtonStyle}" Background="LightGreen" BorderBrush="Green" Cursor="Hand"/>
+                    </StackPanel>
+                </GroupBox>
+                <GroupBox Grid.Column="1" Margin="0,0,0,5"  BorderBrush="DarkOrange" BorderThickness="2">
+                    <GroupBox.Header>
+                        <TextBlock Text="Zoom" Foreground="OrangeRed" FontWeight="Bold" FontSize="14" Margin="0,0,0,0"/>
+                    </GroupBox.Header>
+                    <Grid VerticalAlignment="Center">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="auto"/>
                             <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <GroupBox Margin="0,0,0,5" BorderBrush="Green" BorderThickness="2">
-                            <GroupBox.Header>
-                                <TextBlock Text="Rotate"  FontWeight="Bold" Foreground="Green" FontSize="14" Margin="0,0,0,0"/>
-                            </GroupBox.Header>
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Stretch" VerticalAlignment="Center">
-                                <Button x:Name="RotateMore90" Content="↷ +90º"  Style="{StaticResource ToolbarButtonStyle}" Background="LightGreen" BorderBrush="Green" Cursor="Hand"/>
-                                <Button x:Name="RotateMinus90" Content="↶ -90º" Style="{StaticResource ToolbarButtonStyle}" Background="LightGreen" BorderBrush="Green" Cursor="Hand"/>
-                                <Button x:Name="Rotate180" Content="⟲ 180º" Style="{StaticResource ToolbarButtonStyle}" Background="LightGreen" BorderBrush="Green" Cursor="Hand"/>
-                            </StackPanel>
-                        </GroupBox>
-                        <GroupBox Grid.Column="1" Margin="0,0,0,5"  BorderBrush="DarkOrange" BorderThickness="2">
-                            <GroupBox.Header>
-                                <TextBlock Text="Zoom" Foreground="OrangeRed" FontWeight="Bold" FontSize="14" Margin="0,0,0,0"/>
-                            </GroupBox.Header>
-                            <Grid VerticalAlignment="Center">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <Label Grid.Column="0" x:Name="ZoomLabel" Content="Fit" Margin="0,0,0,0" FontSize="11" Foreground="Gray" FontWeight="Bold" HorizontalContentAlignment="Center" VerticalAlignment="Center"/>
-                                <Button Grid.Column="1" x:Name="ZoomInBtn" Content="🔍➕" Style="{StaticResource ToolbarButtonStyle}" Cursor="Hand"/>
-                                <Button Grid.Column="2" x:Name="ZoomOutBtn" Content="🔍➖" Style="{StaticResource ToolbarButtonStyle}" Cursor="Hand"/>
-                                <Button Grid.Column="3" x:Name="FitBtn" Content="⛶ Fit to Window" Style="{StaticResource ToolbarButtonStyle}" Cursor="Hand"/>
-                                <Button Grid.Column="4" x:Name="ActualSizebtn" Content="Actual Size 1:1" Style="{StaticResource ToolbarButtonStyle}" Cursor="Hand"/>
-                                <Button Grid.Column="5" x:Name="PanModeBtn" Content="✋ Pan" Style="{StaticResource ToolbarButtonStyle}" Cursor="Hand"/>
-                            </Grid>
-                        </GroupBox>
+                        <Label Grid.Column="0" x:Name="ZoomLabel" Content="Fit" Margin="0,0,0,0" FontSize="11" Foreground="Gray" FontWeight="Bold" HorizontalContentAlignment="Center" VerticalAlignment="Center"/>
+                        <Button Grid.Column="1" x:Name="ZoomInBtn" Content="🔍➕" Style="{StaticResource ToolbarButtonStyle}" Cursor="Hand"/>
+                        <Button Grid.Column="2" x:Name="ZoomOutBtn" Content="🔍➖" Style="{StaticResource ToolbarButtonStyle}" Cursor="Hand"/>
+                        <Button Grid.Column="3" x:Name="FitBtn" Content="⛶ Fit to Window" Style="{StaticResource ToolbarButtonStyle}" Cursor="Hand"/>
+                        <Button Grid.Column="4" x:Name="ActualSizebtn" Content="Actual Size 1:1" Style="{StaticResource ToolbarButtonStyle}" Cursor="Hand"/>
+                        <Button Grid.Column="5" x:Name="PanModeBtn" Content="✋ Pan" Style="{StaticResource ToolbarButtonStyle}" Cursor="Hand"/>
                     </Grid>
-                </Border>
+                </GroupBox>
+
+                </Grid>
 
                 <!-- Preview Canvas -->
-                <Border BorderBrush="DarkGray" BorderThickness="1" Background="LightGray" CornerRadius="5" Width="610" Height="610">
-                    <Canvas x:Name="PreviewCanvas" Background="LightGray" Width="600" Height="600">
-                        <Image x:Name="PreviewImage"  Stretch="Uniform" Width="600" Height="600" HorizontalAlignment="Left" VerticalAlignment="Top"/>
-                        <Border x:Name="CropOverlay" BorderBrush="Red" BorderThickness="2" Background="#50FF0000" Visibility="Visible" Width="200" Height="150" Canvas.Left="30" Canvas.Top="20"/>
-                    </Canvas>
-                </Border>
-            </DockPanel>
+            <Border Grid.Row="1" BorderBrush="DarkGray" BorderThickness="1" Background="LightGray" CornerRadius="5" Width="610" Height="610">
+                <Canvas x:Name="PreviewCanvas" Background="LightGray" Width="600" Height="600">
+                    <Image x:Name="PreviewImage"  Stretch="Uniform" Width="600" Height="600" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                    <Border x:Name="CropOverlay" BorderBrush="Red" BorderThickness="2" Background="#50FF0000" Visibility="Visible" Width="200" Height="150" Canvas.Left="30" Canvas.Top="20"/>
+                </Canvas>
+            </Border>
+            </Grid>
         </Grid>
     </Grid>
 </Window>
