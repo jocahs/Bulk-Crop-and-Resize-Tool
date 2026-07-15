@@ -66,6 +66,11 @@ namespace ImageCropTool
             PreviewImage.MouseDown += PreviewImage_MouseDown;
             PreviewImage.MouseMove += PreviewImage_MouseMove;
             PreviewImage.MouseUp += PreviewImage_MouseUp;
+            ZoomInBtn.Click += ZoomInBtn_Click;
+            ZoomOutBtn.Click += ZoomOutBtn_Click;
+            FitBtn.Click += FitBtn_Click;
+            ActualSizebtn.Click += ActualSizeBtn_Click;
+            PanModeBtn.Click += PanModeBtn_Click;
         }
 
         private enum ZoomMode { Fit, Actual, Custom }
@@ -81,10 +86,10 @@ namespace ImageCropTool
         private void UpdatePreviewTransform()
         {
             AppendLog("--- UpdatePreviewTransform called ---\n");
-            
+
             if (_originalImage == null || sourceWidthPx <= 0 || sourceHeightPx <= 0)
             {
-                AppendLog($"  Image is null or invalid size: source {sourceWidthPx}x{sourceHeightPx}\n"); 
+                AppendLog($"  Image is null or invalid size: source {sourceWidthPx}x{sourceHeightPx}\n");
                 PreviewCanvas.RenderTransform = null;
                 _currentScale = 1.0;
                 UpdateZoomLabel();
@@ -96,7 +101,7 @@ namespace ImageCropTool
 
             AppendLog($"  Canvas size: {canvasW}x{canvasH}\n");
             AppendLog($"  Source size: {sourceWidthPx}x{sourceHeightPx}\n");
-            
+
             double scale = 1.0;
             switch (_zoomMode)
             {
@@ -104,7 +109,7 @@ namespace ImageCropTool
                     double scaleX = canvasW / sourceWidthPx;
                     double scaleY = canvasH / sourceHeightPx;
                     scale = Math.Min(scaleX, scaleY);
-                    AppendLog($"  Fit: scaleX={scaleX:F3}, scaleY={scaleY:F3}, scale={scale:F3}\n"); 
+                    AppendLog($"  Fit: scaleX={scaleX:F3}, scaleY={scaleY:F3}, scale={scale:F3}\n");
                     break;
                 case ZoomMode.Actual:
                     scale = 1.0;
@@ -122,15 +127,27 @@ namespace ImageCropTool
 
             _currentScale = scale;
 
+            // --- Clamp panning so the image can't be dragged completely out of view ---
+            double scaledW = sourceWidthPx * scale;
+            double scaledH = sourceHeightPx * scale;
+
+            double minPanX = Math.Min(0, canvasW - scaledW);
+            double maxPanX = Math.Max(0, canvasW - scaledW);
+            double minPanY = Math.Min(0, canvasH - scaledH);
+            double maxPanY = Math.Max(0, canvasH - scaledH);
+
+            _panX = Clamp(_panX, minPanX, maxPanX);
+            _panY = Clamp(_panY, minPanY, maxPanY);
+
             // --- CHANGE: No centering – image is top-left aligned ---
             double totalX = _panX;   // pan offsets only (initialized to 0)
             double totalY = _panY;
 
             AppendLog($"  PreviewImage.ActualWidth = {PreviewImage.ActualWidth:F1}, ActualHeight = {PreviewImage.ActualHeight:F1}\n");
             AppendLog($"  PreviewImage.RenderSize = {PreviewImage.RenderSize.Width:F1} x {PreviewImage.RenderSize.Height:F1}\n");
-            
-           AppendLog($"  Final scale={_currentScale:F3}, pan=({_panX:F1}, {_panY:F1})\n");
-            
+
+            AppendLog($"  Final scale={_currentScale:F3}, pan=({_panX:F1}, {_panY:F1})\n");
+
             var group = new TransformGroup();
             group.Children.Add(new ScaleTransform(scale, scale));
             group.Children.Add(new TranslateTransform(totalX, totalY));
@@ -145,7 +162,7 @@ namespace ImageCropTool
         private double _currentRotation = 0;
         private void Action_CheckedChanged(object sender, RoutedEventArgs e)
         {
-            if (ActionResize.IsChecked == false)            
+            if (ActionResize.IsChecked == false)
             {
                 // When switching to Crop, ensure output doesn't exceed source
                 if (outputWidthPx > sourceWidthPx) outputWidthPx = sourceWidthPx;
@@ -195,7 +212,7 @@ namespace ImageCropTool
         {
             // All filename controls should be enabled only when NoOverwriteChk is checked
             bool isEnabled = NoOverwriteChk.IsChecked == true;
-          
+
             ModePrefix.IsEnabled = !isEnabled;
             ModeSuffix.IsEnabled = !isEnabled;
             NameBox.IsEnabled = !isEnabled;
@@ -231,7 +248,7 @@ namespace ImageCropTool
                 }
             }
         }
-        
+
         private void BrowseForFile(string initialPath = "")
         {
             var dialog = new OpenFileDialog
@@ -350,7 +367,7 @@ namespace ImageCropTool
             DstBox.TextAlignment = TextAlignment.Right;
             DstBox.HorizontalContentAlignment = HorizontalAlignment.Right;
 
-           if (System.IO.Directory.Exists(filePath))
+            if (System.IO.Directory.Exists(filePath))
             {
                 AppendLog($"Output folder: {filePath}\n");
             }
@@ -463,12 +480,12 @@ namespace ImageCropTool
             NameBox.Text = userCustomText ?? defaultText;
 
             LayoutPositioning();
-            
+
         }
         private void LayoutPositioning()
         {
             bool isPrefix = ModePrefix.IsChecked == true;
-            
+
             if (isPrefix)
             {
                 NameStackPanel.Children.Clear();
@@ -581,7 +598,7 @@ namespace ImageCropTool
                 UpdateCropOverlay();
             }
         }
-        
+
         private void WidthBox_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             if (_updatingUI || !IsLoaded) return;
@@ -872,7 +889,7 @@ namespace ImageCropTool
             Progress.Value = 0;
             CancelBtn.IsEnabled = false;
             OpenAfterChk.IsChecked = true;
-            
+
             // Force UI refresh (this also updates the crop overlay)
             UpdateAllTextBoxes();
             UpdateFilenameLayout();
@@ -906,7 +923,7 @@ namespace ImageCropTool
             _isPanMode = false;
             PanModeBtn.Background = Brushes.Transparent;
             PreviewImage.Width = 0;
-            PreviewImage.Height = 0; 
+            PreviewImage.Height = 0;
             UpdatePreviewTransform();
 
             // Reset rotation
@@ -918,7 +935,7 @@ namespace ImageCropTool
 
             // Clear the log
             LogTextBox.Clear();
-            
+
             // Log the action
             AppendLog("Everything reset to default.\n");
         }
@@ -976,7 +993,7 @@ namespace ImageCropTool
 
                 AppendLog($"Image loaded: pixel size {w}x{h}\n");
                 AppendLog($"Image DPI: {bitmap.DpiX:F2} x {bitmap.DpiY:F2}\n");
-                AppendLog($"PreviewImage.Width = {PreviewImage.Width}, PreviewImage.Height = {PreviewImage.Height}\n"); 
+                AppendLog($"PreviewImage.Width = {PreviewImage.Width}, PreviewImage.Height = {PreviewImage.Height}\n");
 
                 SetSourceDimensions(w, h);
                 UpdatePreviewTransform();
@@ -1025,8 +1042,8 @@ namespace ImageCropTool
 
             PreviewImage.Width = w;
             PreviewImage.Height = h;
-            AppendLog($"--- UpdateDisplayedImage: rotation={_currentRotation}, old dims={oldW}x{oldH}, new dims={w}x{h}\n"); 
-            
+            AppendLog($"--- UpdateDisplayedImage: rotation={_currentRotation}, old dims={oldW}x{oldH}, new dims={w}x{h}\n");
+
             UpdatePreviewTransform();
 
             AppendLog($"--- UpdateDisplayedImage: rotation={_currentRotation}, old dims={oldW}x{oldH}, new dims={w}x{h}\n");
@@ -1068,10 +1085,11 @@ namespace ImageCropTool
             // Clamp to source if Crop mode (optional, but will be handled later)
             return (bestW, bestH);
         }
-        private double GetScale() => _currentScale; 
-        
+        private double GetScale() => _currentScale;
+
         private void CropOverlay_MouseDown(object sender, MouseButtonEventArgs e)
         {
+            if (_isPanMode) return;
             if (e.LeftButton != MouseButtonState.Pressed) return;
             if (ActionResize.IsChecked == true) return;
 
@@ -1119,6 +1137,7 @@ namespace ImageCropTool
         }
         private void CropOverlay_MouseMove(object sender, MouseEventArgs e)
         {
+            if (_isPanMode) return;
             Point pos = e.GetPosition(PreviewCanvas);
 
             if (!_isManipulating)
@@ -1155,10 +1174,10 @@ namespace ImageCropTool
             // --- Manipulation ---
             if (ActionResize.IsChecked == true) return;
 
-            var scale = GetScale();
-            double invScale = 1.0 / scale;
-            double deltaX = (pos.X - _startMousePos.X) * invScale;
-            double deltaY = (pos.Y - _startMousePos.Y) * invScale;
+            // pos is already in PreviewCanvas's local (unscaled) coordinate space,
+            // since GetPosition(PreviewCanvas) accounts for the canvas's own RenderTransform.
+            double deltaX = pos.X - _startMousePos.X;
+            double deltaY = pos.Y - _startMousePos.Y;
 
             int newMarginLeft = _startMarginLeftPx;
             int newMarginTop = _startMarginTopPx;
@@ -1319,9 +1338,10 @@ namespace ImageCropTool
             }
         }
         private int Clamp(int value, int min, int max) => value < min ? min : (value > max ? max : value);
+        private double Clamp(double value, double min, double max) => value < min ? min : (value > max ? max : value);
 
         private const double EdgeTolerance = 12.0;
-        
+
         private void ClampCropRectangle()
         {
             // Prevent invalid sizes
@@ -1453,15 +1473,21 @@ namespace ImageCropTool
             // Change button appearance (optional)
             PanModeBtn.Background = _isPanMode ? Brushes.LightBlue : Brushes.Transparent;
             if (_isPanMode)
+            {
                 PreviewImage.Cursor = Cursors.Hand;
+                CropOverlay.IsHitTestVisible = false; // let clicks pass through to PreviewImage for panning
+            }
             else
+            {
                 PreviewImage.Cursor = Cursors.Arrow;
+                CropOverlay.IsHitTestVisible = true;  // restore normal crop drag/resize
+            }
         }
         private void PreviewImage_MouseDown(object sender, MouseButtonEventArgs e)
         {
             if (!_isPanMode || e.LeftButton != MouseButtonState.Pressed) return;
             _isPanning = true;
-            _panStartMouse = e.GetPosition(PreviewCanvas);
+            _panStartMouse = e.GetPosition(this);
             _panStartX = _panX;
             _panStartY = _panY;
             PreviewImage.CaptureMouse();
@@ -1471,7 +1497,7 @@ namespace ImageCropTool
         private void PreviewImage_MouseMove(object sender, MouseEventArgs e)
         {
             if (!_isPanning) return;
-            Point current = e.GetPosition(PreviewCanvas);
+            Point current = e.GetPosition(this);
             double deltaX = current.X - _panStartMouse.X;
             double deltaY = current.Y - _panStartMouse.Y;
             _panX = _panStartX + deltaX;
