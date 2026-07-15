@@ -5,7 +5,8 @@
         Width="1065" Height="720" 
         WindowStartupLocation="CenterScreen"
         xmlns:sys="clr-namespace:System;assembly=mscorlib"
-        xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit">
+        xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
+        xmlns:local="clr-namespace:ImageCropTool">
 
 
     <Window.Resources>
@@ -20,12 +21,17 @@
             </Style.Triggers>
         </Style>
 
-        <!-- Style for all GroupBoxes when disabled -->
+        <!-- Style for all GroupBoxes -->
         <Style TargetType="GroupBox">
             <Style.Triggers>
                 <Trigger Property="IsEnabled" Value="False">
                     <Setter Property="Foreground" Value="Gray" />
                     <Setter Property="Opacity" Value="0.5" />
+                    <Setter Property="BorderBrush" Value="Gray" />
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="True">
+                    <Setter Property="BorderBrush" Value="Blue" />
+                    <Setter Property="BorderThickness" Value="2"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -87,14 +93,14 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <TextBox x:Name="SrcBox" Grid.Column="0" Margin="0,0,5,0" 
-                     Text="Write/Paste or Browse the source path of a file/folder ------>" 
+                     Text="{x:Static local:AppConstants.DefaultSrcBoxText}" 
                      Foreground="DarkOrange" 
                      TextAlignment="Left"
                      VerticalContentAlignment="Center"
                      HorizontalContentAlignment="Left"
                      GotFocus="SrcBox_GotFocus"
                      LostFocus="SrcBox_LostFocus"
-                     TextChanged="SrcBox_TextChanged" FontStyle="Italic" FontWeight="Bold" TextWrapping="Wrap" Height="35"/>
+                     TextChanged="SrcBox_TextChanged" FontStyle="Italic" FontWeight="Bold" TextWrapping="Wrap" Height="35" BorderBrush="DarkOrange" BorderThickness="2"/>
                 <Button Grid.Column="1" Style="{StaticResource ActionButtonStyle}" Content="Browse" Click="SrcBrowse_Click" />
             </Grid>           
             <Label Content="Output folder:" FontWeight="Bold" Margin="0,0,0,0" HorizontalAlignment="Left"/>
@@ -104,41 +110,48 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBox x:Name="DstBox" Grid.Column="0" Margin="0,0,5,0" Text="Write/Paste or Browse if different from Source folder ------>" VerticalContentAlignment="Center" FontStyle="Italic" Foreground="MediumPurple" FontWeight="Bold" TextWrapping="Wrap" Height="35"/>
+                <TextBox x:Name="DstBox" Grid.Column="0" Margin="0,0,5,0" Text="{x:Static local:AppConstants.DefaultDstBoxText}" VerticalContentAlignment="Center" FontStyle="Italic" Foreground="MediumPurple" FontWeight="Bold" TextWrapping="Wrap" Height="35" BorderBrush="MediumPurple" BorderThickness="2"/>
                 <Button Grid.Column="1"  Style="{StaticResource ActionButtonStyle}" Content="Browse" Click="DstBrowse_Click" />
             </Grid>
 
-            <CheckBox x:Name="OpenAfterChk" IsChecked="True" VerticalAlignment="Center" Margin="5,5,0,0" HorizontalAlignment="Left" Content="Open folder when done" FontSize="13">
-            </CheckBox>
-
-            <Separator Margin="0,5,0,0" />
+            <DockPanel VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,5,0,-5">
+                <CheckBox x:Name="OpenAfterChk" IsChecked="True" DockPanel.Dock="Right" Margin="5,0,10,0">
+                    <CheckBox.LayoutTransform>
+                        <ScaleTransform ScaleX="1.5" ScaleY="1.5" />
+                    </CheckBox.LayoutTransform>
+                </CheckBox>
+                <TextBlock Text="Open folder when done" TextAlignment="Right" FontWeight="Bold" VerticalAlignment="Center"/>
+            </DockPanel>
 
             <!-- Filename Group (simplified) -->
-            <GroupBox Header="Output Filename" Margin="0,5,0,0" Height="65">
+            <GroupBox Margin="0,0,0,0" Height="75">
+                <GroupBox.Header>
+                    <TextBlock Text="Output Filename" FontWeight="Bold" FontSize="14" />
+                </GroupBox.Header>
                 <Grid x:Name="NameGrid">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="60" />
-                        <ColumnDefinition Width="1" />
+                        <ColumnDefinition Width="65" />
+                        <ColumnDefinition Width="2" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
 
-                    <StackPanel Grid.RowSpan="2" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="-3,2,0,0">
+                    <StackPanel Grid.RowSpan="2" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,5,0,0">
                         <CheckBox x:Name="NoOverwriteChk" IsChecked="false" 
                               HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,0">
                             <CheckBox.LayoutTransform>
                                 <ScaleTransform ScaleX="1.5" ScaleY="1.5" />
                             </CheckBox.LayoutTransform>
                         </CheckBox>
-                        <TextBlock Text="Overwrite" TextWrapping="Wrap" TextAlignment="Center" FontSize="12" FontWeight="Bold" />
+                        <TextBlock Text="Overwrite" TextWrapping="Wrap" TextAlignment="Center" FontWeight="Bold" />
                     </StackPanel>
 
-                    <Border Grid.RowSpan="3" Grid.Column="1" BorderBrush="LightGray" BorderThickness="1" Margin="0,2,0,2" Width="1" />
+                    <Border Grid.RowSpan="3" Grid.Column="1" BorderThickness="2" Margin="0,2,0,0" Width="2" VerticalAlignment="Stretch"/>
 
-                    <StackPanel Orientation="Horizontal" Grid.Row="0" Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-5,0,0">
+                    <StackPanel Orientation="Horizontal" Grid.Row="0" Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,0">
                         <RadioButton x:Name="ModePrefix" IsChecked="True" Margin="0,0,0,0" FontSize="16" Content="Prefix" VerticalContentAlignment="center"/>
                         <RadioButton x:Name="ModeSuffix" Checked="ModeSuffix_Checked" Margin="40,0,0,0" FontSize="16" Content="Suffix" VerticalContentAlignment="center"/>
                     </StackPanel>
@@ -152,11 +165,10 @@
                 </Grid>
             </GroupBox>
 
-            <Separator Margin="0,5,0,0" />
-            <Grid  Margin="0,5,0,0">
+            <Grid  Margin="0,0,0,0">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="20"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="10"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
@@ -164,15 +176,13 @@
                     <GroupBox.Header>
                         <TextBlock Text="Action" FontWeight="Bold" FontSize="14" />
                     </GroupBox.Header>
-                    <StackPanel Orientation="Horizontal">
-                        <RadioButton x:Name="ActionCrop" Content="Crop" IsChecked="True" Margin="5"/>
-                        <RadioButton x:Name="ActionResize" Content="Resize" Margin="5"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <RadioButton x:Name="ActionCrop" Content="Crop" IsChecked="True" Margin="10,5,5,5"/>
+                        <RadioButton x:Name="ActionResize" Content="Resize"  Margin="10,5,5,5"/>
                     </StackPanel>
                 </GroupBox>
 
-                <Border Grid.Column="1" Width="1" Margin="5,5,5,0" Background="#CCCCCC" VerticalAlignment="Stretch"/>
-
-                <GroupBox Grid.Column="2" HorizontalAlignment="Left" Margin="0,0,0,0">
+                <GroupBox Grid.Column="2" Margin="0,0,0,0" >
                     <GroupBox.Header>
                         <TextBlock Text="Units" FontWeight="Bold" FontSize="14" />
                     </GroupBox.Header>
@@ -186,19 +196,18 @@
 
             <!-- Units -->
 
-            <Separator Margin="0,5,0,0" />
-
             <!-- Dimensions -->
 
-            <Grid  Margin="0,5,0,0">
+            <Grid  Margin="0,0,0,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <GroupBox Grid.Column="0" Margin="0,0,5,0">
+                <GroupBox Grid.Column="0" Margin="0,0,0,0">
                     <GroupBox.Header>
-                        <TextBlock Text="Dimensions"  FontWeight="Bold" FontSize="14" Margin="0,0,0,0"/>
+                        <TextBlock Text="Dimensions"  FontWeight="Bold" FontSize="14" Margin="0,0,0,0" />
                     </GroupBox.Header>
 
                     <Grid >
@@ -208,7 +217,7 @@
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="45" />
+                            <ColumnDefinition Width="50" />
                             <ColumnDefinition Width="50" />
                             <ColumnDefinition Width="20" />
                             <ColumnDefinition Width="50" />
@@ -216,14 +225,14 @@
                             <ColumnDefinition Width="55" />
                         </Grid.ColumnDefinitions>
 
-                        <Label Grid.Row="1" Grid.Column="0" Content="Source:" Margin="-5,0,0,0"  HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+                        <Label Grid.Row="1" Grid.Column="0" Content="Source:" Margin="0,0,0,0"  HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
                         <TextBox x:Name="WidthSourceBox" Text="0" Grid.Row="1" Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center" IsReadOnly="True" Background="LightGray" TextAlignment="Right" Margin="0,0,0,0"  Height="20" Width="40" Padding="0,0,0,0"/>
                         <Label Content="{DynamicResource UnitText}" Grid.Row="1" Grid.Column="2" Margin="0,0,0,0" Padding="0" VerticalAlignment="Center" HorizontalAlignment="Left" FontSize="12"/>
                         <TextBox x:Name="HeightSourceBox" Text="0"  Grid.Row="1" Grid.Column="3" IsReadOnly="True" Background="LightGray" TextAlignment="Right" Margin="0,0,0,0"  Height="20" Width="40" Padding="0,0,0,0" HorizontalAlignment="Center"/>
                         <Label Content="{DynamicResource UnitText}" Margin="0,0,0,0" Padding="0" Grid.Row="1" Grid.Column="4" VerticalAlignment="Center" HorizontalAlignment="Left" FontSize="12"/>
 
 
-                        <Label Grid.Row="2" Grid.Column="0" Content="Output:" Margin="-5,0,0,0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" />
+                        <Label Grid.Row="2" Grid.Column="0" Content="Output:" Margin="0,0,0,0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" />
                         
                         <xctk:IntegerUpDown Value="1024" x:Name="WidthBox" Grid.Row="2" Grid.Column="1" TextAlignment="Right" Margin="0,0,0,0" Height="20" Width="40" MaxLength="5" Minimum="1" Maximum="99999" Padding="0,0,0,0" HorizontalAlignment="Center" ShowButtonSpinner="False"/>
                         <Label Content="{DynamicResource UnitText}" Margin="0,0,0,0" Padding="0" Grid.Row="2" Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Left" FontSize="12"/>
@@ -244,7 +253,7 @@
                         
                     </Grid>
                 </GroupBox>
-                <GroupBox x:Name="MarginsSettings" Grid.Column="1" Margin="0,0,0,0">
+                <GroupBox x:Name="MarginsSettings" Grid.Column="2" Margin="0,0,0,0">
                     <GroupBox.Header>
                         <TextBlock Text="Margins"  FontWeight="Bold" FontSize="14" Margin="0,0,0,0"/>
                     </GroupBox.Header>
@@ -284,10 +293,6 @@
                     </Grid>
                 </GroupBox>
             </Grid>
-
-
-            <Separator Margin="0,5,0,5" />
-
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -298,23 +303,24 @@
                     <!-- LogTextBox - takes remaining space -->
                 </Grid.RowDefinitions>
 
-                <DockPanel Grid.Row="0" Margin="0,0,0,5">
-                    <Button x:Name="ResetBtn" Content="Reset settings" Style="{StaticResource ActionButtonStyle}" DockPanel.Dock="Left"/>
+                <DockPanel Grid.Row="0" Margin="0,5,0,5">
+                    <Button x:Name="ResetBtn" Content="Reset Settings" Style="{StaticResource ActionButtonStyle}" DockPanel.Dock="Left"/>
+                    <Button x:Name="ResetAll" Content="Reset All" Style="{StaticResource ActionButtonStyle}" DockPanel.Dock="Left" Background="DarkOrange"/>
                     <Button x:Name="CropBtn" Content="CROP IMAGES" Width="100" Style="{StaticResource ActionButtonStyle}" Background="LightSeaGreen" DockPanel.Dock="Right"/>
-                    <Button x:Name="CancelBtn" Content="Cancel" Style="{StaticResource ActionButtonStyle}" IsEnabled="False" DockPanel.Dock="Right"  Width="100" HorizontalAlignment="Right"/>                    
+                    <Button x:Name="CancelBtn" Content="Cancel" Style="{StaticResource ActionButtonStyle}" IsEnabled="False" DockPanel.Dock="Right"  Width="100"  Background="red" HorizontalAlignment="Right"/>                    
                 </DockPanel>
             </Grid>
             <ProgressBar x:Name="Progress" Height="20" Margin="0,0,0,5" />
 
                 <TextBox x:Name="LogTextBox" IsReadOnly="True" 
                          TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" 
-                         Background="LightGray" MaxHeight="200" Padding="2"/>
+                         Background="LightGray" MaxHeight="225" Padding="2"/>
             
         </StackPanel>
 
         <!-- Right Panel (Preview) -->
         <Grid Grid.Column="1" Margin="10,0,0,0">
-            <Line X1="0" Y1="0" X2="0" Y2="1" Stroke="Gray" StrokeThickness="1" HorizontalAlignment="Left"  VerticalAlignment="Stretch" Stretch="Fill" Margin="-7,0,0,0"/>
+            <Line X1="0" Y1="0" X2="0" Y2="1" Stroke="Gray" StrokeThickness="1" HorizontalAlignment="Left"  VerticalAlignment="Stretch" Stretch="Fill" Margin="-7,5,0,5"/>
             <Grid >
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="auto"/>
@@ -331,7 +337,7 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="auto"/>
                     </Grid.RowDefinitions>
-                    <GroupBox Margin="0,0,0,5" BorderBrush="Green" BorderThickness="2" Width="180" HorizontalAlignment="Left">
+                    <GroupBox Margin="0,0,0,5" BorderBrush="Green" Width="180" HorizontalAlignment="Left">
                     <GroupBox.Header>
                         <TextBlock Text="Rotate"  FontWeight="Bold" Foreground="Green" FontSize="14" Margin="0,0,0,0"/>
                     </GroupBox.Header>
@@ -341,7 +347,7 @@
                         <Button x:Name="Rotate180" Content="⟲ 180º" Style="{StaticResource ToolbarButtonStyle}" Background="LightGreen" BorderBrush="Green" Cursor="Hand"/>
                     </StackPanel>
                 </GroupBox>
-                <GroupBox Grid.Column="1" Margin="0,0,0,5"  BorderBrush="DarkOrange" BorderThickness="2">
+                <GroupBox Grid.Column="1" Margin="0,0,0,5"  BorderBrush="DarkOrange">
                     <GroupBox.Header>
                         <TextBlock Text="Zoom" Foreground="OrangeRed" FontWeight="Bold" FontSize="14" Margin="0,0,0,0"/>
                     </GroupBox.Header>

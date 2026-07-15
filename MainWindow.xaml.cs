@@ -10,6 +10,11 @@ using Xceed.Wpf.Toolkit;
 
 namespace ImageCropTool
 {
+    public static class AppConstants
+    {
+        public const string DefaultSrcBoxText = "Write/Paste or Browse the source path of a file/folder ----->";
+        public const string DefaultDstBoxText = "Write/Paste or Browse if different from Source folder ------>";
+    }
     public partial class MainWindow : Window
     {
         public MainWindow()
@@ -45,8 +50,9 @@ namespace ImageCropTool
             PreviewCanvas.MouseLeave += (s, e) => Cursor = Cursors.Arrow;
             PreviewImage.Loaded += (s, e) => UpdateCropOverlay();
             PreviewImage.SizeChanged += (s, e) => UpdateCropOverlay();
-            this.PreviewKeyDown += Window_PreviewKeyDown; 
+            this.PreviewKeyDown += Window_PreviewKeyDown;
             ResetBtn.Click += ResetBtn_Click;
+            ResetAll.Click += ResetAll_Click;
             Rotate180.Click += (s, e) => { _currentRotation += 180; UpdateDisplayedImage(); };
             RotateMinus90.Click += (s, e) => { _currentRotation -= 90; UpdateDisplayedImage(); };
             RotateMore90.Click += (s, e) => { _currentRotation += 90; UpdateDisplayedImage(); };
@@ -69,6 +75,7 @@ namespace ImageCropTool
                 // When switching to Crop, ensure output doesn't exceed source
                 if (outputWidthPx > sourceWidthPx) outputWidthPx = sourceWidthPx;
                 if (outputHeightPx > sourceHeightPx) outputHeightPx = sourceHeightPx;
+                AspectRatio.IsChecked = false; // disable aspect ratio when switching to crop
                 RefreshCropUI(); // refresh UI after clamping
             }
             UpdateUnitAvailability();
@@ -100,7 +107,7 @@ namespace ImageCropTool
             UnitPer.IsEnabled = isResize;
             StackRatio.IsEnabled = isResize;
             MarginsSettings.IsEnabled = !isResize;
-            CropOverlay.Visibility = isResize ? Visibility.Collapsed : Visibility.Visible;
+            if (isResize) { CropOverlay.Visibility = Visibility.Hidden; }
 
             // If UnitPer is selected but now disabled, switch to Pixels
             if (!isResize && UnitPer.IsChecked == true)
@@ -216,7 +223,7 @@ namespace ImageCropTool
             string path = SrcBox.Text;
 
             // If the text is empty or the placeholder, show "filename"
-            if (string.IsNullOrEmpty(path) || path == "Write/Paste or Browse the source path of a file/folder ------>")
+            if (string.IsNullOrEmpty(path) || path == (string)AppConstants.DefaultSrcBoxText)
             {
                 NameExample.Text = "filename";
                 return;
@@ -278,7 +285,7 @@ namespace ImageCropTool
             string currentText = SrcBox.Text;
 
             // Check if it's the default placeholder or empty
-            if (string.IsNullOrEmpty(currentText) || currentText == "Write/Paste or Browse the source path of a file/folder ------>")
+            if (string.IsNullOrEmpty(currentText) || currentText == (string)AppConstants.DefaultSrcBoxText)
             {
                 // Left align for default text
                 SrcBox.FlowDirection = FlowDirection.LeftToRight;
@@ -308,7 +315,7 @@ namespace ImageCropTool
 
         private void SrcBox_GotFocus(object sender, RoutedEventArgs e)
         {
-            if (SrcBox.Text == "Write/Paste or Browse the source path of a file/folder ------>")
+            if (SrcBox.Text == (string)AppConstants.DefaultSrcBoxText)
             {
                 SrcBox.Text = "";
                 SrcBox.FlowDirection = FlowDirection.LeftToRight;
@@ -320,10 +327,10 @@ namespace ImageCropTool
         private void SrcBox_LostFocus(object sender, RoutedEventArgs e)
         {
             string path = SrcBox.Text;
-            if (string.IsNullOrWhiteSpace(path) || path == "Write/Paste or Browse the source path of a file/folder ------>")
+            if (string.IsNullOrWhiteSpace(path) || path == (string)AppConstants.DefaultSrcBoxText)
             {
                 // restore placeholder
-                SrcBox.Text = "Write/Paste or Browse the source path of a file/folder ------>";
+                SrcBox.Text = (string)AppConstants.DefaultSrcBoxText;
                 SrcBox.FlowDirection = FlowDirection.LeftToRight;
                 SrcBox.TextAlignment = TextAlignment.Left;
                 SrcBox.HorizontalContentAlignment = HorizontalAlignment.Left;
@@ -745,7 +752,7 @@ namespace ImageCropTool
         {
             if (sourceWidthPx <= 0 || sourceHeightPx <= 0 || _originalImage == null)
             {
-                CropOverlay.Visibility = Visibility.Collapsed;
+                CropOverlay.Visibility = Visibility.Hidden;
                 return;
             }
 
@@ -760,7 +767,15 @@ namespace ImageCropTool
             // Do NOT rotate the overlay border – it stays axis‑aligned (bounding box)
             CropOverlay.RenderTransform = null;
 
-            CropOverlay.Visibility = Visibility.Visible;
+            if (_originalImage == null || ActionResize.IsChecked == true)
+            {
+                CropOverlay.Visibility = Visibility.Hidden;
+            }
+            else
+            {
+                // Ensure the overlay is visible
+                CropOverlay.Visibility = Visibility.Visible;
+            }
         }
         private void ResetBtn_Click(object sender, RoutedEventArgs e)
         {
@@ -782,12 +797,50 @@ namespace ImageCropTool
             ModePrefix.IsChecked = true;    // default to Prefix
             NoOverwriteChk.IsChecked = false;
 
+            // Reset progress, cancel button, "Open folder" checkbox
+            Progress.Value = 0;
+            CancelBtn.IsEnabled = false;
+            OpenAfterChk.IsChecked = true;
+            
             // Force UI refresh (this also updates the crop overlay)
             UpdateAllTextBoxes();
             UpdateFilenameLayout();
 
             // Log the action
             AppendLog("Settings reset to default.\n");
+        }
+        private void ResetAll_Click(object sender, RoutedEventArgs e)
+        {
+            // Reset source and destination text boxes
+            SrcBox.Text = AppConstants.DefaultSrcBoxText;
+            SrcBox.FlowDirection = FlowDirection.LeftToRight;
+            SrcBox.TextAlignment = TextAlignment.Left;
+            SrcBox.HorizontalContentAlignment = HorizontalAlignment.Left;
+
+            DstBox.Text = AppConstants.DefaultDstBoxText;
+            DstBox.FlowDirection = FlowDirection.LeftToRight;
+            DstBox.TextAlignment = TextAlignment.Left;
+            DstBox.HorizontalContentAlignment = HorizontalAlignment.Left;
+
+            // Clear preview image and hide overlay
+            PreviewImage.Source = null;
+            _originalImage = null;
+            CropOverlay.Visibility = Visibility.Hidden;
+            sourceWidthPx = 1000;
+            sourceHeightPx = 2000;
+            
+            // Reset rotation
+            _currentRotation = 0;
+            _previousRotation = 0;
+            UpdateDisplayedImage();
+
+            ResetBtn_Click(this, new RoutedEventArgs());
+
+            // Clear the log
+            LogTextBox.Clear();
+            
+            // Log the action
+            AppendLog("Everything reset to default.\n");
         }
 
         private void UpdateMaxValues()
