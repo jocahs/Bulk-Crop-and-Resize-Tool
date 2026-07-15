@@ -63,9 +63,84 @@ namespace ImageCropTool
             UnitPixels.Checked += Unit_CheckedChanged;
             WidthBox.LostFocus += WidthBox_LostFocus;
             WidthBox.ValueChanged += WidthBox_ValueChanged;
-
+            PreviewImage.MouseDown += PreviewImage_MouseDown;
+            PreviewImage.MouseMove += PreviewImage_MouseMove;
+            PreviewImage.MouseUp += PreviewImage_MouseUp;
         }
 
+        private enum ZoomMode { Fit, Actual, Custom }
+        private ZoomMode _zoomMode = ZoomMode.Fit;
+        private double _customZoom = 1.0;
+        private double _currentScale = 1.0;
+        private double _panX = 0, _panY = 0;
+        private bool _isPanMode = false;
+        private bool _isPanning = false;
+        private Point _panStartMouse;
+        private double _panStartX, _panStartY;
+
+        private void UpdatePreviewTransform()
+        {
+            AppendLog("--- UpdatePreviewTransform called ---\n");
+            
+            if (_originalImage == null || sourceWidthPx <= 0 || sourceHeightPx <= 0)
+            {
+                AppendLog($"  Image is null or invalid size: source {sourceWidthPx}x{sourceHeightPx}\n"); 
+                PreviewCanvas.RenderTransform = null;
+                _currentScale = 1.0;
+                UpdateZoomLabel();
+                return;
+            }
+
+            double canvasW = PreviewCanvas.ActualWidth;   // 600
+            double canvasH = PreviewCanvas.ActualHeight;  // 600
+
+            AppendLog($"  Canvas size: {canvasW}x{canvasH}\n");
+            AppendLog($"  Source size: {sourceWidthPx}x{sourceHeightPx}\n");
+            
+            double scale = 1.0;
+            switch (_zoomMode)
+            {
+                case ZoomMode.Fit:
+                    double scaleX = canvasW / sourceWidthPx;
+                    double scaleY = canvasH / sourceHeightPx;
+                    scale = Math.Min(scaleX, scaleY);
+                    AppendLog($"  Fit: scaleX={scaleX:F3}, scaleY={scaleY:F3}, scale={scale:F3}\n"); 
+                    break;
+                case ZoomMode.Actual:
+                    scale = 1.0;
+                    AppendLog($"  Actual: scale=1.0\n");
+                    break;
+                case ZoomMode.Custom:
+                    scale = _customZoom;
+                    AppendLog($"  Custom: scale={scale:F3}\n");
+                    break;
+            }
+
+            // Clamp scale to avoid extreme values
+            if (scale < 0.01) scale = 0.01;
+            if (scale > 100) scale = 100;
+
+            _currentScale = scale;
+
+            // --- CHANGE: No centering – image is top-left aligned ---
+            double totalX = _panX;   // pan offsets only (initialized to 0)
+            double totalY = _panY;
+
+            AppendLog($"  PreviewImage.ActualWidth = {PreviewImage.ActualWidth:F1}, ActualHeight = {PreviewImage.ActualHeight:F1}\n");
+            AppendLog($"  PreviewImage.RenderSize = {PreviewImage.RenderSize.Width:F1} x {PreviewImage.RenderSize.Height:F1}\n");
+            
+           AppendLog($"  Final scale={_currentScale:F3}, pan=({_panX:F1}, {_panY:F1})\n");
+            
+            var group = new TransformGroup();
+            group.Children.Add(new ScaleTransform(scale, scale));
+            group.Children.Add(new TranslateTransform(totalX, totalY));
+            PreviewCanvas.RenderTransform = group;
+
+            AppendLog($"  Transform: Scale={scale:F3}, Translate=({totalX:F1}, {totalY:F1})\n");
+
+            UpdateZoomLabel();
+            UpdateCropOverlay();
+        }
         private BitmapSource? _originalImage = null;   // the raw image (no rotation)
         private double _currentRotation = 0;
         private void Action_CheckedChanged(object sender, RoutedEventArgs e)
@@ -335,6 +410,8 @@ namespace ImageCropTool
                 SrcBox.TextAlignment = TextAlignment.Left;
                 SrcBox.HorizontalContentAlignment = HorizontalAlignment.Left;
                 PreviewImage.Source = null;   // <-- clear preview
+                PreviewImage.Width = 0;
+                PreviewImage.Height = 0;
                 _originalImage = null;
                 CropOverlay.Visibility = Visibility.Hidden;   // <-- hide overlay
                 return;
@@ -756,26 +833,20 @@ namespace ImageCropTool
                 return;
             }
 
-            double scale = GetScale();
+            // Set position and size in raw pixel values (no scale)
+            Canvas.SetLeft(CropOverlay, marginLeftPx);
+            Canvas.SetTop(CropOverlay, marginTopPx);
+            CropOverlay.Width = Math.Max(1, outputWidthPx);
+            CropOverlay.Height = Math.Max(1, outputHeightPx);
 
-            // Overlay is already in the current image pixel space (rotated if needed)
-            CropOverlay.Width = Math.Max(1, outputWidthPx * scale);
-            CropOverlay.Height = Math.Max(1, outputHeightPx * scale);
-            Canvas.SetLeft(CropOverlay, marginLeftPx * scale);
-            Canvas.SetTop(CropOverlay, marginTopPx * scale);
-
-            // Do NOT rotate the overlay border – it stays axis‑aligned (bounding box)
+            // No rotation for the overlay
             CropOverlay.RenderTransform = null;
 
+            // Show/hide based on mode
             if (_originalImage == null || ActionResize.IsChecked == true)
-            {
                 CropOverlay.Visibility = Visibility.Hidden;
-            }
             else
-            {
-                // Ensure the overlay is visible
                 CropOverlay.Visibility = Visibility.Visible;
-            }
         }
         private void ResetBtn_Click(object sender, RoutedEventArgs e)
         {
@@ -828,7 +899,16 @@ namespace ImageCropTool
             CropOverlay.Visibility = Visibility.Hidden;
             sourceWidthPx = 1000;
             sourceHeightPx = 2000;
-            
+            _zoomMode = ZoomMode.Fit;
+            _customZoom = 1.0;
+            _panX = 0;
+            _panY = 0;
+            _isPanMode = false;
+            PanModeBtn.Background = Brushes.Transparent;
+            PreviewImage.Width = 0;
+            PreviewImage.Height = 0; 
+            UpdatePreviewTransform();
+
             // Reset rotation
             _currentRotation = 0;
             _previousRotation = 0;
@@ -889,7 +969,17 @@ namespace ImageCropTool
 
                 int w = bitmap.PixelWidth;
                 int h = bitmap.PixelHeight;
+
+                // Force image to render at pixel size (ignores DPI)
+                PreviewImage.Width = w;
+                PreviewImage.Height = h;
+
+                AppendLog($"Image loaded: pixel size {w}x{h}\n");
+                AppendLog($"Image DPI: {bitmap.DpiX:F2} x {bitmap.DpiY:F2}\n");
+                AppendLog($"PreviewImage.Width = {PreviewImage.Width}, PreviewImage.Height = {PreviewImage.Height}\n"); 
+
                 SetSourceDimensions(w, h);
+                UpdatePreviewTransform();
                 UpdateDisplayedImage();
                 _currentImagePath = filePath;
                 CropOverlay.Visibility = Visibility.Visible;
@@ -933,6 +1023,14 @@ namespace ImageCropTool
             // Update source dimensions (used for scaling and max values)
             SetSourceDimensions(w, h);
 
+            PreviewImage.Width = w;
+            PreviewImage.Height = h;
+            AppendLog($"--- UpdateDisplayedImage: rotation={_currentRotation}, old dims={oldW}x{oldH}, new dims={w}x{h}\n"); 
+            
+            UpdatePreviewTransform();
+
+            AppendLog($"--- UpdateDisplayedImage: rotation={_currentRotation}, old dims={oldW}x{oldH}, new dims={w}x{h}\n");
+
             // Rotate the image itself (TransformedBitmap)
             BitmapSource display = _originalImage;
             if (Math.Abs(_currentRotation % 360) > 0.001)
@@ -970,26 +1068,8 @@ namespace ImageCropTool
             // Clamp to source if Crop mode (optional, but will be handled later)
             return (bestW, bestH);
         }
-        private double GetScale()
-        {
-            if (sourceWidthPx <= 0 || sourceHeightPx <= 0) return (1);
-
-            double displayWidth = PreviewCanvas.ActualWidth;
-            double displayHeight = PreviewCanvas.ActualHeight;
-            if (displayWidth <= 0 || displayHeight <= 0)
-            {
-                displayWidth = 600;
-                displayHeight = 600;
-            }
-
-            double scaleX = displayWidth / sourceWidthPx;
-            double scaleY = displayHeight / sourceHeightPx;
-            double scale = Math.Min(scaleX, scaleY);
-            if (scale <= 0 || double.IsInfinity(scale) || double.IsNaN(scale))
-                scale = 1.0;
-
-            return (scale);
-        }
+        private double GetScale() => _currentScale; 
+        
         private void CropOverlay_MouseDown(object sender, MouseButtonEventArgs e)
         {
             if (e.LeftButton != MouseButtonState.Pressed) return;
@@ -1316,6 +1396,125 @@ namespace ImageCropTool
                 outputHeightPx = (int)Math.Round(width);
             }
             // angle 0 → no change
+        }
+        private void ZoomInBtn_Click(object sender, RoutedEventArgs e)
+        {
+            if (_originalImage == null) return;
+            if (_zoomMode == ZoomMode.Fit)
+            {
+                // Start from the current fit scale
+                _customZoom = _currentScale * 1.1;
+            }
+            else
+            {
+                _customZoom *= 1.1;
+            }
+            _zoomMode = ZoomMode.Custom;
+            UpdatePreviewTransform();
+        }
+
+        private void ZoomOutBtn_Click(object sender, RoutedEventArgs e)
+        {
+            if (_originalImage == null) return;
+            if (_zoomMode == ZoomMode.Fit)
+            {
+                _customZoom = _currentScale / 1.1;
+            }
+            else
+            {
+                _customZoom /= 1.1;
+            }
+            if (_customZoom < 0.01) _customZoom = 0.01;
+            _zoomMode = ZoomMode.Custom;
+            UpdatePreviewTransform();
+        }
+
+        private void FitBtn_Click(object sender, RoutedEventArgs e)
+        {
+            if (_originalImage == null) return;
+            _zoomMode = ZoomMode.Fit;
+            _panX = 0;
+            _panY = 0;
+            UpdatePreviewTransform();
+        }
+
+        private void ActualSizeBtn_Click(object sender, RoutedEventArgs e)
+        {
+            if (_originalImage == null) return;
+            _zoomMode = ZoomMode.Actual;
+            _panX = 0;
+            _panY = 0;
+            UpdatePreviewTransform();
+        }
+
+        private void PanModeBtn_Click(object sender, RoutedEventArgs e)
+        {
+            _isPanMode = !_isPanMode;
+            // Change button appearance (optional)
+            PanModeBtn.Background = _isPanMode ? Brushes.LightBlue : Brushes.Transparent;
+            if (_isPanMode)
+                PreviewImage.Cursor = Cursors.Hand;
+            else
+                PreviewImage.Cursor = Cursors.Arrow;
+        }
+        private void PreviewImage_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (!_isPanMode || e.LeftButton != MouseButtonState.Pressed) return;
+            _isPanning = true;
+            _panStartMouse = e.GetPosition(PreviewCanvas);
+            _panStartX = _panX;
+            _panStartY = _panY;
+            PreviewImage.CaptureMouse();
+            e.Handled = true;
+        }
+
+        private void PreviewImage_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (!_isPanning) return;
+            Point current = e.GetPosition(PreviewCanvas);
+            double deltaX = current.X - _panStartMouse.X;
+            double deltaY = current.Y - _panStartMouse.Y;
+            _panX = _panStartX + deltaX;
+            _panY = _panStartY + deltaY;
+            UpdatePreviewTransform();
+            e.Handled = true;
+        }
+
+        private void PreviewImage_MouseUp(object sender, MouseButtonEventArgs e)
+        {
+            if (_isPanning)
+            {
+                _isPanning = false;
+                PreviewImage.ReleaseMouseCapture();
+                e.Handled = true;
+            }
+        }
+        private void UpdateZoomLabel()
+        {
+            if (_originalImage == null)
+            {
+                ZoomLabel.Content = "No image";
+                return;
+            }
+
+            string text;
+            switch (_zoomMode)
+            {
+                case ZoomMode.Fit:
+                    text = "Fit";
+                    break;
+                case ZoomMode.Actual:
+                    text = "1:1";
+                    break;
+                case ZoomMode.Custom:
+                    int percent = (int)Math.Round(_currentScale * 100);
+                    text = $"{percent}%";
+                    break;
+                default:
+                    text = "";
+                    break;
+            }
+            ZoomLabel.Content = text;
         }
     }
 

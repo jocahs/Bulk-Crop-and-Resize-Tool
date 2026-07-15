@@ -374,7 +374,7 @@
                 <!-- Preview Canvas -->
             <Border Grid.Row="1" BorderBrush="DarkGray" BorderThickness="1" Background="LightGray" CornerRadius="5" Width="610" Height="610">
                 <Canvas x:Name="PreviewCanvas" Background="LightGray" Width="600" Height="600">
-                    <Image x:Name="PreviewImage"  Stretch="Uniform" Width="600" Height="600" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                    <Image x:Name="PreviewImage"  Stretch="Fill" HorizontalAlignment="Left" VerticalAlignment="Top"/>
                     <Border x:Name="CropOverlay" BorderBrush="Red" BorderThickness="2" Background="#50FF0000" Visibility="Visible" Width="200" Height="150" Canvas.Left="30" Canvas.Top="20"/>
                 </Canvas>
             </Border>
