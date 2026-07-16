@@ -1,5 +1,6 @@
 ﻿using Microsoft.Win32;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -1640,10 +1641,60 @@ namespace ImageCropTool
 
 
 
-        private void CropBtn_Click(object sender, RoutedEventArgs e)
+        private async void CropBtn_Click(object sender, RoutedEventArgs e)
         {
-            if (_originalImage == null) return;
+            if (_originalImage == null)
+            {
+                AppendLog("No image loaded.\n");
+                return;
+            }
 
+            // Determine source path
+            string srcPath = SrcBox.Text;
+            if (string.IsNullOrWhiteSpace(srcPath) || srcPath == AppConstants.DefaultSrcBoxText)
+            {
+                AppendLog("Please specify a source file or folder.\n");
+                return;
+            }
+
+            // Determine output folder
+            string dstPath = DstBox.Text;
+            string outputFolder;
+            if (!string.IsNullOrWhiteSpace(dstPath) && Directory.Exists(dstPath))
+            {
+                outputFolder = dstPath;
+            }
+            else if (Directory.Exists(srcPath))
+            {
+                outputFolder = srcPath; // use source folder if no output specified
+            }
+            else
+            {
+                outputFolder = Path.GetDirectoryName(srcPath) ?? Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
+            }
+
+            // Check if source is a folder
+            if (Directory.Exists(srcPath))
+            {
+                // Batch processing
+                string[] extensions = { "*.jpg", "*.jpeg", "*.png", "*.bmp", "*.gif", "*.tiff" };
+                var files = new List<string>();
+                foreach (var ext in extensions)
+                {
+                    files.AddRange(Directory.GetFiles(srcPath, ext, SearchOption.TopDirectoryOnly));
+                }
+                if (files.Count == 0)
+                {
+                    AppendLog("No image files found in the selected folder.\n");
+                    return;
+                }
+
+                AppendLog($"Starting batch crop for {files.Count} images...\n");
+                await ProcessBatchAsync(srcPath, outputFolder, files);
+                return;
+            }
+
+            // --- Single file processing (existing code) ---
             // Ensure the crop rectangle is valid
             ClampCropRectangle();
 
@@ -1652,7 +1703,7 @@ namespace ImageCropTool
             int w = outputWidthPx;
             int h = outputHeightPx;
 
-            // Clamp to image bounds
+            // Clamp to image bounds (should already be clamped, but safety)
             if (x < 0) x = 0;
             if (y < 0) y = 0;
             if (x + w > sourceWidthPx) w = Math.Max(0, sourceWidthPx - x);
@@ -1668,28 +1719,12 @@ namespace ImageCropTool
                     source = new TransformedBitmap(_originalImage, transform);
                     source.Freeze();
                 }
-                
+
                 var cropRect = new Int32Rect(x, y, w, h);
                 var cropped = new CroppedBitmap(source, cropRect);
                 cropped.Freeze();
 
-                // Decide save directory
-                string dstPath = DstBox.Text;
-                string saveDir;
-                if (!string.IsNullOrWhiteSpace(dstPath) && Directory.Exists(dstPath))
-                {
-                    saveDir = dstPath;
-                }
-                else if (!string.IsNullOrWhiteSpace(_currentImagePath))
-                {
-                    saveDir = Path.GetDirectoryName(_currentImagePath) ?? Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
-                }
-                else
-                {
-                    saveDir = Path.GetDirectoryName(SrcBox.Text) ?? Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
-                }
-
-                // Determine filename
+                // Determine filename (original code)
                 string originalName = string.Empty;
                 if (!string.IsNullOrWhiteSpace(_currentImagePath))
                     originalName = Path.GetFileName(_currentImagePath);
@@ -1702,7 +1737,6 @@ namespace ImageCropTool
 
                 if (OverwriteChk.IsChecked == true)
                 {
-                    // Overwrite: keep original base name
                     finalBase = Path.GetFileNameWithoutExtension(originalName);
                 }
                 else if (ModePrefix.IsChecked == true)
@@ -1714,9 +1748,8 @@ namespace ImageCropTool
                     finalBase = $"{SourcePart}{PreSufFromUI}";
                 }
 
-                // Normalize final filename
                 string saveFileName = finalBase + ext;
-                string savePath = Path.Combine(saveDir, saveFileName);
+                string savePath = Path.Combine(outputFolder, saveFileName);
 
                 if (File.Exists(savePath) && OverwriteChk.IsChecked == false)
                 {
@@ -1729,35 +1762,26 @@ namespace ImageCropTool
 
                     if (res != MessageBoxResult.Yes)
                     {
-                        // Generate a new unique name (basic _1, _2, ...)
                         int count = 1;
-                        string dir = saveDir;
                         string baseName = Path.GetFileNameWithoutExtension(saveFileName);
                         while (File.Exists(savePath))
                         {
                             saveFileName = $"{baseName}_{count}{ext}";
-                            savePath = Path.Combine(dir, saveFileName);
+                            savePath = Path.Combine(outputFolder, saveFileName);
                             count++;
                         }
                     }
-
                 }
-                // Save the cropped image to disk (format chosen by extension)
+
                 BitmapEncoder encoder;
                 string lowerExt = ext.ToLower();
                 if (lowerExt == ".png") encoder = new PngBitmapEncoder();
                 else if (lowerExt == ".bmp") encoder = new BmpBitmapEncoder();
                 else if (lowerExt == ".gif") encoder = new GifBitmapEncoder();
-                else // default to JPEG
-                    encoder = new JpegBitmapEncoder();
+                else encoder = new JpegBitmapEncoder();
 
                 encoder.Frames.Add(BitmapFrame.Create(cropped));
-
-                // Optional: set JPEG quality
-                if (encoder is JpegBitmapEncoder jpeg)
-                {
-                    jpeg.QualityLevel = 90;
-                }
+                if (encoder is JpegBitmapEncoder jpeg) jpeg.QualityLevel = 90;
 
                 using (var stream = new FileStream(savePath, FileMode.Create, FileAccess.Write))
                 {
@@ -1766,10 +1790,191 @@ namespace ImageCropTool
 
                 AppendLog($"Cropped image saved to: {savePath}\n");
 
+                if (OpenAfterChk.IsChecked == true)
+                {
+                    System.Diagnostics.Process.Start("explorer.exe", outputFolder);
+                }
             }
             catch (Exception ex)
             {
                 AppendLog($"Crop failed: {ex.Message}\n");
+            }
+        }
+        private BitmapSource? LoadImageFromFile(string filePath)
+        {
+            try
+            {
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.UriSource = new Uri(filePath);
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.DecodePixelWidth = 0;
+                bitmap.EndInit();
+                bitmap.Freeze();
+                return bitmap;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+        private BitmapSource CropSingleImage(BitmapSource source, double rotationAngle,
+                                     int cropX, int cropY, int cropW, int cropH)
+        {
+            BitmapSource rotated = source;
+            if (Math.Abs(rotationAngle % 360) > 0.001)
+            {
+                var transform = new RotateTransform(rotationAngle);
+                rotated = new TransformedBitmap(source, transform);
+                rotated.Freeze();
+            }
+
+            // Ensure crop rectangle is within bounds
+            int rw = rotated.PixelWidth;
+            int rh = rotated.PixelHeight;
+            cropX = Math.Max(0, Math.Min(cropX, rw - 1));
+            cropY = Math.Max(0, Math.Min(cropY, rh - 1));
+            cropW = Math.Max(1, Math.Min(cropW, rw - cropX));
+            cropH = Math.Max(1, Math.Min(cropH, rh - cropY));
+
+            var cropRect = new Int32Rect(cropX, cropY, cropW, cropH);
+            var cropped = new CroppedBitmap(rotated, cropRect);
+            cropped.Freeze();
+            return cropped;
+        }
+        private async System.Threading.Tasks.Task ProcessBatchAsync(string folderPath, string outputFolder, List<string> files)
+        {
+            // Compute relative crop ratios from the current (first image) dimensions
+            double leftRatio = (double)marginLeftPx / sourceWidthPx;
+            double topRatio = (double)marginTopPx / sourceHeightPx;
+            double widthRatio = (double)outputWidthPx / sourceWidthPx;
+            double heightRatio = (double)outputHeightPx / sourceHeightPx;
+
+            int total = files.Count;
+            int processed = 0;
+            Progress.Maximum = total;
+            Progress.Value = 0;
+            CancelBtn.IsEnabled = true; // for future cancellation
+
+            // Precompute rotation angle
+            double angle = _currentRotation % 360;
+
+            foreach (string filePath in files)
+            {
+                // Check for cancellation (you can implement later)
+                // if (cancellationToken.IsCancellationRequested) break;
+
+                // Load the image
+                var image = LoadImageFromFile(filePath);
+                if (image == null)
+                {
+                    AppendLog($"Failed to load: {Path.GetFileName(filePath)}\n");
+                    processed++;
+                    Progress.Value = processed;
+                    continue;
+                }
+
+                // Determine rotated dimensions
+                int origW = image.PixelWidth;
+                int origH = image.PixelHeight;
+                int rotW = origW, rotH = origH;
+                double angleMod = angle;
+                if (angleMod < 0) angleMod += 360;
+                if (Math.Abs(angleMod - 90) < 0.1 || Math.Abs(angleMod - 270) < 0.1)
+                {
+                    rotW = origH;
+                    rotH = origW;
+                }
+
+                // Compute crop rectangle in rotated coordinates
+                int cropX = (int)Math.Round(leftRatio * rotW);
+                int cropY = (int)Math.Round(topRatio * rotH);
+                int cropW = (int)Math.Round(widthRatio * rotW);
+                int cropH = (int)Math.Round(heightRatio * rotH);
+
+                // Clamp to image bounds
+                cropX = Math.Max(0, Math.Min(cropX, rotW - 1));
+                cropY = Math.Max(0, Math.Min(cropY, rotH - 1));
+                cropW = Math.Max(1, Math.Min(cropW, rotW - cropX));
+                cropH = Math.Max(1, Math.Min(cropH, rotH - cropY));
+
+                // Perform crop
+                var cropped = CropSingleImage(image, angle, cropX, cropY, cropW, cropH);
+
+                // Determine output filename
+                string originalName = Path.GetFileName(filePath);
+                string baseName = Path.GetFileNameWithoutExtension(originalName);
+                string ext = Path.GetExtension(originalName);
+                if (string.IsNullOrEmpty(ext)) ext = ".jpg";
+
+                string finalBase;
+                string PreSufFromUI = (PreSufBox.Text ?? "").Trim();
+                if (OverwriteChk.IsChecked == true)
+                {
+                    finalBase = baseName;
+                }
+                else if (ModePrefix.IsChecked == true)
+                {
+                    finalBase = $"{PreSufFromUI}{baseName}";
+                }
+                else // suffix
+                {
+                    finalBase = $"{baseName}{PreSufFromUI}";
+                }
+
+                string saveFileName = finalBase + ext;
+                string savePath = Path.Combine(outputFolder, saveFileName);
+
+                // Handle overwrite conflicts if not overwriting
+                if (!OverwriteChk.IsChecked == true && File.Exists(savePath))
+                {
+                    int count = 1;
+                    while (File.Exists(savePath))
+                    {
+                        saveFileName = $"{finalBase}_{count}{ext}";
+                        savePath = Path.Combine(outputFolder, saveFileName);
+                        count++;
+                    }
+                }
+
+                // Save
+                try
+                {
+                    BitmapEncoder encoder;
+                    string lowerExt = ext.ToLower();
+                    if (lowerExt == ".png") encoder = new PngBitmapEncoder();
+                    else if (lowerExt == ".bmp") encoder = new BmpBitmapEncoder();
+                    else if (lowerExt == ".gif") encoder = new GifBitmapEncoder();
+                    else encoder = new JpegBitmapEncoder();
+
+                    encoder.Frames.Add(BitmapFrame.Create(cropped));
+                    if (encoder is JpegBitmapEncoder jpeg) jpeg.QualityLevel = 90;
+
+                    using (var stream = new FileStream(savePath, FileMode.Create, FileAccess.Write))
+                    {
+                        encoder.Save(stream);
+                    }
+                    AppendLog($"Saved: {saveFileName}\n");
+                }
+                catch (Exception ex)
+                {
+                    AppendLog($"Error saving {saveFileName}: {ex.Message}\n");
+                }
+
+                processed++;
+                Progress.Value = processed;
+                // Allow UI to update
+                await System.Threading.Tasks.Task.Delay(1);
+            }
+
+            Progress.Value = total;
+            CancelBtn.IsEnabled = false;
+            AppendLog($"Batch processing completed. {processed} files processed.\n");
+
+            // Open folder if checked
+            if (OpenAfterChk.IsChecked == true)
+            {
+                System.Diagnostics.Process.Start("explorer.exe", outputFolder);
             }
         }
 
