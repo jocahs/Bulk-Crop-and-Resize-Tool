@@ -33,47 +33,49 @@ namespace ImageCropTool
             // Attach event handlers
             ActionCrop.Checked += Action_CheckedChanged;
             ActionResize.Checked += Action_CheckedChanged;
+            ActualSizebtn.Click += ActualSizeBtn_Click;
             AspectRatio.Checked += AspectRatio_Checked;
             AspectRatio.Unchecked += AspectRatio_Checked;
-            CropOverlay.Visibility = Visibility.Hidden;
+            CropBtn.Click += CropBtn_Click;
             CropOverlay.MouseDown += CropOverlay_MouseDown;
             CropOverlay.MouseMove += CropOverlay_MouseMove;
             CropOverlay.MouseUp += CropOverlay_MouseUp;
+            CropOverlay.Visibility = Visibility.Hidden;
+            FitBtn.Click += FitBtn_Click;
             HeightBox.LostFocus += HeightBox_LostFocus;
             HeightBox.ValueChanged += HeightBox_ValueChanged;
+            HScrollBar.ValueChanged += HScrollBar_ValueChanged;
             MarginLeftBox.ValueChanged += MarginLeftBox_ValueChanged;
             MargintopBox.ValueChanged += MargintopBox_ValueChanged;
             ModePrefix.Checked += ModePrefix_Checked;
             ModeSuffix.Checked += ModeSuffix_Checked;
-            NoOverwriteChk.Checked += NoOverwrite_CheckedChanged;
-            NoOverwriteChk.Unchecked += NoOverwrite_CheckedChanged;
+            OverwriteChk.Checked += NoOverwrite_CheckedChanged;
+            OverwriteChk.Unchecked += NoOverwrite_CheckedChanged;
+            PanModeBtn.Click += PanModeBtn_Click;
+            PreSufBox.LostFocus += PreSufBox_LostFocus; 
+            PreviewBorder.MouseWheel += PreviewArea_MouseWheel;
             PreviewCanvas.MouseLeave += (s, e) => Cursor = Cursors.Arrow;
             PreviewImage.Loaded += (s, e) => UpdateCropOverlay();
+            PreviewImage.MouseDown += PreviewImage_MouseDown;
+            PreviewImage.MouseMove += PreviewImage_MouseMove;
+            PreviewImage.MouseUp += PreviewImage_MouseUp;
             PreviewImage.SizeChanged += (s, e) => UpdateCropOverlay();
-            this.PreviewKeyDown += Window_PreviewKeyDown;
-            ResetBtn.Click += ResetBtn_Click;
             ResetAll.Click += ResetAll_Click;
+            ResetBtn.Click += ResetBtn_Click;
             Rotate180.Click += (s, e) => { _currentRotation += 180; UpdateDisplayedImage(); };
             RotateMinus90.Click += (s, e) => { _currentRotation -= 90; UpdateDisplayedImage(); };
             RotateMore90.Click += (s, e) => { _currentRotation += 90; UpdateDisplayedImage(); };
             SrcBox.TextChanged += SrcBox_TextChanged;
+            this.PreviewKeyDown += Window_PreviewKeyDown;
             UnitMM.Checked += Unit_CheckedChanged;
             UnitPer.Checked += Unit_CheckedChanged;
             UnitPer.IsEnabled = false;
             UnitPixels.Checked += Unit_CheckedChanged;
+            VScrollBar.ValueChanged += VScrollBar_ValueChanged;
             WidthBox.LostFocus += WidthBox_LostFocus;
             WidthBox.ValueChanged += WidthBox_ValueChanged;
-            PreviewImage.MouseDown += PreviewImage_MouseDown;
-            PreviewImage.MouseMove += PreviewImage_MouseMove;
-            PreviewImage.MouseUp += PreviewImage_MouseUp;
             ZoomInBtn.Click += ZoomInBtn_Click;
             ZoomOutBtn.Click += ZoomOutBtn_Click;
-            FitBtn.Click += FitBtn_Click;
-            ActualSizebtn.Click += ActualSizeBtn_Click;
-            PanModeBtn.Click += PanModeBtn_Click;
-            HScrollBar.ValueChanged += HScrollBar_ValueChanged;
-            VScrollBar.ValueChanged += VScrollBar_ValueChanged;
-            PreviewBorder.MouseWheel += PreviewArea_MouseWheel;
         }
 
         private enum ZoomMode { Fit, Actual, Custom }
@@ -90,11 +92,8 @@ namespace ImageCropTool
 
         private void UpdatePreviewTransform()
         {
-            AppendLog("--- UpdatePreviewTransform called ---\n");
-
             if (_originalImage == null || sourceWidthPx <= 0 || sourceHeightPx <= 0)
             {
-                AppendLog($"  Image is null or invalid size: source {sourceWidthPx}x{sourceHeightPx}\n");
                 PreviewCanvas.RenderTransform = null;
                 _currentScale = 1.0;
                 UpdateZoomLabel();
@@ -104,10 +103,6 @@ namespace ImageCropTool
 
             double canvasW = PreviewCanvas.ActualWidth;   // 600
             double canvasH = PreviewCanvas.ActualHeight;  // 600
-
-            AppendLog($"  Canvas size: {canvasW}x{canvasH}\n");
-            AppendLog($"  Source size: {sourceWidthPx}x{sourceHeightPx}\n");
-
             double scale = 1.0;
             switch (_zoomMode)
             {
@@ -115,15 +110,12 @@ namespace ImageCropTool
                     double scaleX = canvasW / sourceWidthPx;
                     double scaleY = canvasH / sourceHeightPx;
                     scale = Math.Min(scaleX, scaleY);
-                    AppendLog($"  Fit: scaleX={scaleX:F3}, scaleY={scaleY:F3}, scale={scale:F3}\n");
                     break;
                 case ZoomMode.Actual:
                     scale = 1.0;
-                    AppendLog($"  Actual: scale=1.0\n");
                     break;
                 case ZoomMode.Custom:
                     scale = _customZoom;
-                    AppendLog($"  Custom: scale={scale:F3}\n");
                     break;
             }
 
@@ -158,17 +150,10 @@ namespace ImageCropTool
             double totalX = _panX;   // pan offsets only (initialized to 0)
             double totalY = _panY;
 
-            AppendLog($"  PreviewImage.ActualWidth = {PreviewImage.ActualWidth:F1}, ActualHeight = {PreviewImage.ActualHeight:F1}\n");
-            AppendLog($"  PreviewImage.RenderSize = {PreviewImage.RenderSize.Width:F1} x {PreviewImage.RenderSize.Height:F1}\n");
-
-            AppendLog($"  Final scale={_currentScale:F3}, pan=({_panX:F1}, {_panY:F1})\n");
-
             var group = new TransformGroup();
             group.Children.Add(new ScaleTransform(scale, scale));
             group.Children.Add(new TranslateTransform(totalX, totalY));
             PreviewCanvas.RenderTransform = group;
-
-            AppendLog($"  Transform: Scale={scale:F3}, Translate=({totalX:F1}, {totalY:F1})\n");
 
             UpdateZoomLabel();
             UpdateCropOverlay();
@@ -285,12 +270,12 @@ namespace ImageCropTool
 
         private void UpdateFilenameAvailability()
         {
-            // All filename controls should be enabled only when NoOverwriteChk is checked
-            bool isEnabled = NoOverwriteChk.IsChecked == true;
+            // All filename controls should be enabled only when OverwriteChk is checked
+            bool isEnabled = OverwriteChk.IsChecked == true;
 
             ModePrefix.IsEnabled = !isEnabled;
             ModeSuffix.IsEnabled = !isEnabled;
-            NameBox.IsEnabled = !isEnabled;
+            PreSufBox.IsEnabled = !isEnabled;
 
             if (!isEnabled)
             {
@@ -299,7 +284,7 @@ namespace ImageCropTool
             else
             {
                 NameStackPanel.Children.Clear();
-                NameStackPanel.Children.Add(NameExample);
+                NameStackPanel.Children.Add(NameSource);
                 NameStackPanel.Children.Add(NameExtension);
             }
         }
@@ -392,7 +377,7 @@ namespace ImageCropTool
             // If the text is empty or the placeholder, show "filename"
             if (string.IsNullOrEmpty(path) || path == (string)AppConstants.DefaultSrcBoxText)
             {
-                NameExample.Text = "filename";
+                NameSource.Text = "filename";
                 return;
             }
 
@@ -422,7 +407,7 @@ namespace ImageCropTool
                 // If no image is found, baseName stays "filename"
             }
 
-            NameExample.Text = baseName;
+            NameSource.Text = baseName;
             NameExtension.Text = fileExtension;
         }
         private void SetFilePath(string filePath)
@@ -537,7 +522,7 @@ namespace ImageCropTool
             bool isResize = ActionResize.IsChecked == true;
             bool isPrefix = ModePrefix.IsChecked == true;
 
-            // Determine default text for NameBox
+            // Determine default text for PreSufBox
             string defaultText;
             if (isResize)
                 defaultText = isPrefix ? "resized_" : "_resized";
@@ -545,14 +530,14 @@ namespace ImageCropTool
                 defaultText = isPrefix ? "cropped_" : "_cropped";
 
             // Preserve user custom text
-            string currentText = NameBox.Text;
+            string currentText = PreSufBox.Text;
             bool isDefaultText = currentText == "_cropped" || currentText == "_resized" ||
                                  currentText == "cropped_" || currentText == "resized_";
             if (!isDefaultText)
                 userCustomText = currentText;
 
-            // Set NameBox text
-            NameBox.Text = userCustomText ?? defaultText;
+            // Set PreSufBox text
+            PreSufBox.Text = userCustomText ?? defaultText;
 
             LayoutPositioning();
 
@@ -564,15 +549,15 @@ namespace ImageCropTool
             if (isPrefix)
             {
                 NameStackPanel.Children.Clear();
-                NameStackPanel.Children.Add(NameBox);
-                NameStackPanel.Children.Add(NameExample);
+                NameStackPanel.Children.Add(PreSufBox);
+                NameStackPanel.Children.Add(NameSource);
                 NameStackPanel.Children.Add(NameExtension);
             }
             else
             {
                 NameStackPanel.Children.Clear();
-                NameStackPanel.Children.Add(NameExample);
-                NameStackPanel.Children.Add(NameBox);
+                NameStackPanel.Children.Add(NameSource);
+                NameStackPanel.Children.Add(PreSufBox);
                 NameStackPanel.Children.Add(NameExtension);
             }
         }
@@ -958,7 +943,8 @@ namespace ImageCropTool
             // Reset filename settings
             userCustomText = null;          // clear any custom text
             ModePrefix.IsChecked = true;    // default to Prefix
-            NoOverwriteChk.IsChecked = false;
+            OverwriteChk.IsChecked = false;
+            PreSufBox.Text = "cropped_"; 
 
             // Reset progress, cancel button, "Open folder" checkbox
             Progress.Value = 0;
@@ -1076,10 +1062,6 @@ namespace ImageCropTool
                 PreviewImage.Width = w;
                 PreviewImage.Height = h;
 
-                AppendLog($"Image loaded: pixel size {w}x{h}\n");
-                AppendLog($"Image DPI: {bitmap.DpiX:F2} x {bitmap.DpiY:F2}\n");
-                AppendLog($"PreviewImage.Width = {PreviewImage.Width}, PreviewImage.Height = {PreviewImage.Height}\n");
-
                 SetSourceDimensions(w, h);
                 UpdatePreviewTransform();
                 UpdateDisplayedImage();
@@ -1127,11 +1109,7 @@ namespace ImageCropTool
 
             PreviewImage.Width = w;
             PreviewImage.Height = h;
-            AppendLog($"--- UpdateDisplayedImage: rotation={_currentRotation}, old dims={oldW}x{oldH}, new dims={w}x{h}\n");
-
             UpdatePreviewTransform();
-
-            AppendLog($"--- UpdateDisplayedImage: rotation={_currentRotation}, old dims={oldW}x{oldH}, new dims={w}x{h}\n");
 
             // Rotate the image itself (TransformedBitmap)
             BitmapSource display = _originalImage;
@@ -1627,6 +1605,174 @@ namespace ImageCropTool
             }
             ZoomLabel.Content = text;
         }
+
+        private void PreSufBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            var textBox = PreSufBox;
+            if (textBox == null) return;
+
+            var text = textBox.Text ?? string.Empty;
+            if (string.IsNullOrEmpty(text))
+            {
+                var result = System.Windows.MessageBox.Show(
+                    "Prefix/Suffix additional name is empty. Overwrite?",
+                    "Overwrite?",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning,
+                    MessageBoxResult.No);
+
+                bool isResize = ActionResize.IsChecked == true;
+                bool isPrefix = ModePrefix.IsChecked == true;
+                string defaultText = isResize
+                    ? (isPrefix ? "resized_" : "_resized")
+                    : (isPrefix ? "cropped_" : "_cropped");
+
+                // Update text without re-entrancy issues
+                textBox.Text = defaultText;
+                UpdateFilenameLayout();
+
+                if (result != MessageBoxResult.Yes)
+                    return;
+
+                OverwriteChk.IsChecked = true;
+            }
+        }
+
+
+
+        private void CropBtn_Click(object sender, RoutedEventArgs e)
+        {
+            if (_originalImage == null) return;
+
+            // Ensure the crop rectangle is valid
+            ClampCropRectangle();
+
+            int x = marginLeftPx;
+            int y = marginTopPx;
+            int w = outputWidthPx;
+            int h = outputHeightPx;
+
+            // Clamp to image bounds
+            if (x < 0) x = 0;
+            if (y < 0) y = 0;
+            if (x + w > sourceWidthPx) w = Math.Max(0, sourceWidthPx - x);
+            if (y + h > sourceHeightPx) h = Math.Max(0, sourceHeightPx - y);
+            if (w <= 0 || h <= 0) return;
+
+            try
+            {
+                BitmapSource source = _originalImage;
+                if (Math.Abs(_currentRotation % 360) > 0.001)
+                {
+                    var transform = new RotateTransform(_currentRotation);
+                    source = new TransformedBitmap(_originalImage, transform);
+                    source.Freeze();
+                }
+                
+                var cropRect = new Int32Rect(x, y, w, h);
+                var cropped = new CroppedBitmap(source, cropRect);
+                cropped.Freeze();
+
+                // Decide save directory
+                string dstPath = DstBox.Text;
+                string saveDir;
+                if (!string.IsNullOrWhiteSpace(dstPath) && Directory.Exists(dstPath))
+                {
+                    saveDir = dstPath;
+                }
+                else if (!string.IsNullOrWhiteSpace(_currentImagePath))
+                {
+                    saveDir = Path.GetDirectoryName(_currentImagePath) ?? Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
+                }
+                else
+                {
+                    saveDir = Path.GetDirectoryName(SrcBox.Text) ?? Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
+                }
+
+                // Determine filename
+                string originalName = string.Empty;
+                if (!string.IsNullOrWhiteSpace(_currentImagePath))
+                    originalName = Path.GetFileName(_currentImagePath);
+                string ext = Path.GetExtension(originalName);
+                if (string.IsNullOrWhiteSpace(ext)) ext = ".jpg";
+
+                string finalBase = string.Empty;
+                string PreSufFromUI = (PreSufBox.Text ?? "").Trim();
+                string SourcePart = (NameSource.Text ?? "").Trim();
+
+                if (OverwriteChk.IsChecked == true)
+                {
+                    // Overwrite: keep original base name
+                    finalBase = Path.GetFileNameWithoutExtension(originalName);
+                }
+                else if (ModePrefix.IsChecked == true)
+                {
+                    finalBase = $"{PreSufFromUI}{SourcePart}";
+                }
+                else if (ModeSuffix.IsChecked == true)
+                {
+                    finalBase = $"{SourcePart}{PreSufFromUI}";
+                }
+
+                // Normalize final filename
+                string saveFileName = finalBase + ext;
+                string savePath = Path.Combine(saveDir, saveFileName);
+
+                if (File.Exists(savePath) && OverwriteChk.IsChecked == false)
+                {
+                    var res = System.Windows.MessageBox.Show(
+                        $"File already exists:\n{savePath}\nOverwrite?",
+                        "Overwrite?",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Warning,
+                        MessageBoxResult.No);
+
+                    if (res != MessageBoxResult.Yes)
+                    {
+                        // Generate a new unique name (basic _1, _2, ...)
+                        int count = 1;
+                        string dir = saveDir;
+                        string baseName = Path.GetFileNameWithoutExtension(saveFileName);
+                        while (File.Exists(savePath))
+                        {
+                            saveFileName = $"{baseName}_{count}{ext}";
+                            savePath = Path.Combine(dir, saveFileName);
+                            count++;
+                        }
+                    }
+
+                }
+                // Save the cropped image to disk (format chosen by extension)
+                BitmapEncoder encoder;
+                string lowerExt = ext.ToLower();
+                if (lowerExt == ".png") encoder = new PngBitmapEncoder();
+                else if (lowerExt == ".bmp") encoder = new BmpBitmapEncoder();
+                else if (lowerExt == ".gif") encoder = new GifBitmapEncoder();
+                else // default to JPEG
+                    encoder = new JpegBitmapEncoder();
+
+                encoder.Frames.Add(BitmapFrame.Create(cropped));
+
+                // Optional: set JPEG quality
+                if (encoder is JpegBitmapEncoder jpeg)
+                {
+                    jpeg.QualityLevel = 90;
+                }
+
+                using (var stream = new FileStream(savePath, FileMode.Create, FileAccess.Write))
+                {
+                    encoder.Save(stream);
+                }
+
+                AppendLog($"Cropped image saved to: {savePath}\n");
+
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"Crop failed: {ex.Message}\n");
+            }
+        }
+
     }
 
 }
