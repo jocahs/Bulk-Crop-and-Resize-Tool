@@ -24,6 +24,7 @@ namespace ImageCropTool
             InitializeComponent();
             // Set initial states
 
+            AppendLog($"Constructor Width = {Width}\n"); 
             RefreshCropUI();
             UpdateUnitAvailability();
             UpdateFilenameAvailability();
@@ -39,7 +40,6 @@ namespace ImageCropTool
             AspectRatio.Checked += AspectRatio_Checked;
             AspectRatio.Unchecked += AspectRatio_Checked;
             CropBtn.Click += CropBtn_Click;
-            CropOverlay.MouseDown += CropOverlay_MouseDown;
             CropOverlay.MouseMove += CropOverlay_MouseMove;
             CropOverlay.MouseUp += CropOverlay_MouseUp;
             CropOverlay.Visibility = Visibility.Hidden;
@@ -57,7 +57,9 @@ namespace ImageCropTool
             PreSufBox.LostFocus += PreSufBox_LostFocus; 
             PreviewBorder.MouseWheel += PreviewArea_MouseWheel;
             PreviewCanvas.MouseLeave += (s, e) => Cursor = Cursors.Arrow;
+            PreviewCanvas.PreviewMouseDown += PreviewCanvas_PreviewMouseDown;
             PreviewImage.Loaded += (s, e) => UpdateCropOverlay();
+            PreviewImage.Loaded += (s, e) => LogLayoutInfo();
             PreviewImage.MouseDown += PreviewImage_MouseDown;
             PreviewImage.MouseMove += PreviewImage_MouseMove;
             PreviewImage.MouseUp += PreviewImage_MouseUp;
@@ -78,6 +80,9 @@ namespace ImageCropTool
             WidthBox.ValueChanged += WidthBox_ValueChanged;
             ZoomInBtn.Click += ZoomInBtn_Click;
             ZoomOutBtn.Click += ZoomOutBtn_Click;
+            PreviewCanvas.MouseMove += PreviewCanvas_MouseMove;
+            this.Loaded += (s, e) => LogLayoutInfo();
+            Loaded += (_, _) => Width = MinWidth;
         }
 
         private enum ZoomMode { Fit, Actual, Custom }
@@ -349,7 +354,29 @@ namespace ImageCropTool
 
             if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             {
-                SetFilePath(dialog.SelectedPath);
+                string selectedFolder = dialog.SelectedPath;
+
+                string[] extensions =
+                {
+                    "*.jpg","*.jpeg","*.png",
+                    "*.bmp","*.gif","*.tiff"
+                };
+
+                bool hasImage = extensions.Any(ext =>
+                    Directory.GetFiles(selectedFolder, ext).Length > 0);
+
+                if (!hasImage)
+                {
+                    System.Windows.MessageBox.Show(
+                        "The selected folder contains no image files.",
+                        "Invalid Folder",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+
+                    return;
+                }
+
+                SetFilePath(selectedFolder);
             }
         }
         private void DstBrowse_Click(object sender, RoutedEventArgs e)
@@ -930,8 +957,8 @@ namespace ImageCropTool
         private void ResetBtn_Click(object sender, RoutedEventArgs e)
         {
             // Reset output dimensions to the current source dimensions
-            outputWidthPx = sourceWidthPx;
-            outputHeightPx = sourceHeightPx;
+            outputWidthPx = sourceWidthPx/2;
+            outputHeightPx = sourceHeightPx/2;
 
             // Reset margins to zero
             marginLeftPx = 0;
@@ -989,6 +1016,8 @@ namespace ImageCropTool
             CropOverlay.Visibility = Visibility.Hidden;
             sourceWidthPx = 1000;
             sourceHeightPx = 2000;
+            outputWidthPx = sourceWidthPx/2;
+            outputHeightPx = sourceHeightPx/2;
             _zoomMode = ZoomMode.Fit;
             _customZoom = 1.0;
             _panX = 0;
@@ -1056,12 +1085,22 @@ namespace ImageCropTool
                 int w = normalizedImage.PixelWidth;
                 int h = normalizedImage.PixelHeight;
 
+                bool wasDefaultHalfSize =
+                    outputWidthPx == sourceWidthPx / 2 &&
+                    outputHeightPx == sourceHeightPx / 2;
+
+                if (wasDefaultHalfSize)
+                {
+                    outputWidthPx = w / 2;
+                    outputHeightPx = h / 2;
+                }
+
                 PreviewImage.Width = w;
                 PreviewImage.Height = h;
 
                 SetSourceDimensions(w, h);
                 UpdatePreviewTransform();
-                UpdateDisplayedImage(); // now the image is already normalized, so this will apply the manual rotation (0° by default)
+                UpdateDisplayedImage();
                 _currentImagePath = filePath;
                 CropOverlay.Visibility = Visibility.Visible;
             }
@@ -1147,13 +1186,12 @@ namespace ImageCropTool
         }
         private double GetScale() => _currentScale;
 
-        private void CropOverlay_MouseDown(object sender, MouseButtonEventArgs e)
+        private void PreviewCanvas_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
             if (_isPanMode) return;
             if (e.LeftButton != MouseButtonState.Pressed) return;
             if (ActionResize.IsChecked == true) return;
 
-            CropOverlay.CaptureMouse();
             Point pos = e.GetPosition(PreviewCanvas);
             double left = Canvas.GetLeft(CropOverlay);
             double top = Canvas.GetTop(CropOverlay);
@@ -1166,7 +1204,7 @@ namespace ImageCropTool
             bool nearTop = Math.Abs(pos.Y - top) < tolerance;
             bool nearBottom = Math.Abs(pos.Y - bottom) < tolerance;
 
-            // Determine resize mode – corners take priority over edges
+            // Determine resize mode – corners take priority
             if (nearLeft && nearTop)
                 _resizeMode = "ResizeTopLeft";
             else if (nearRight && nearTop)
@@ -1186,6 +1224,12 @@ namespace ImageCropTool
             else
                 _resizeMode = "Drag";
 
+            // For dragging (not resizing), the click must be inside the overlay
+            bool inside = (pos.X >= left && pos.X <= right && pos.Y >= top && pos.Y <= bottom);
+            if (_resizeMode == "Drag" && !inside)
+                return;
+
+            // Start manipulation
             _isManipulating = true;
             _startMousePos = pos;
             _startMarginLeftPx = marginLeftPx;
@@ -1193,49 +1237,64 @@ namespace ImageCropTool
             _startWidthPx = outputWidthPx;
             _startHeightPx = outputHeightPx;
 
+            // Capture mouse on the overlay – this ensures we get Move/Up events even if mouse leaves
+            CropOverlay.CaptureMouse();
             e.Handled = true;
+        }
+        private void PreviewCanvas_MouseMove(object sender, MouseEventArgs e)
+        {
+            // If no image or overlay hidden, reset to default arrow
+            if (_originalImage == null || CropOverlay.Visibility != Visibility.Visible || ActionResize.IsChecked == true)
+            {
+                Cursor = Cursors.Arrow;
+                return;
+            }
+
+            // In pan mode, always show the hand cursor
+            if (_isPanMode)
+            {
+                Cursor = Cursors.Hand;
+                return;
+            }
+
+            Point pos = e.GetPosition(PreviewCanvas);
+            double left = Canvas.GetLeft(CropOverlay);
+            double top = Canvas.GetTop(CropOverlay);
+            double right = left + CropOverlay.Width;
+            double bottom = top + CropOverlay.Height;
+            double tolerance = EdgeTolerance;
+
+            bool nearLeft = Math.Abs(pos.X - left) < tolerance;
+            bool nearRight = Math.Abs(pos.X - right) < tolerance;
+            bool nearTop = Math.Abs(pos.Y - top) < tolerance;
+            bool nearBottom = Math.Abs(pos.Y - bottom) < tolerance;
+
+            Cursor cursor = Cursors.Arrow;
+
+            if (nearLeft && nearTop)
+                cursor = Cursors.SizeNWSE;
+            else if (nearRight && nearTop)
+                cursor = Cursors.SizeNESW;
+            else if (nearLeft && nearBottom)
+                cursor = Cursors.SizeNESW;
+            else if (nearRight && nearBottom)
+                cursor = Cursors.SizeNWSE;
+            else if (nearLeft || nearRight)
+                cursor = Cursors.SizeWE;
+            else if (nearTop || nearBottom)
+                cursor = Cursors.SizeNS;
+            else
+                cursor = Cursors.Arrow;
+
+            Cursor = cursor;
         }
         private void CropOverlay_MouseMove(object sender, MouseEventArgs e)
         {
             if (_isPanMode) return;
-            Point pos = e.GetPosition(PreviewCanvas);
-
-            if (!_isManipulating)
-            {
-                // Update cursor based on position
-                double left = Canvas.GetLeft(CropOverlay);
-                double top = Canvas.GetTop(CropOverlay);
-                double right = left + CropOverlay.Width;
-                double bottom = top + CropOverlay.Height;
-                double tolerance = EdgeTolerance;
-
-                bool nearLeft = Math.Abs(pos.X - left) < tolerance;
-                bool nearRight = Math.Abs(pos.X - right) < tolerance;
-                bool nearTop = Math.Abs(pos.Y - top) < tolerance;
-                bool nearBottom = Math.Abs(pos.Y - bottom) < tolerance;
-
-                if (nearLeft && nearTop)
-                    Cursor = Cursors.SizeNWSE;
-                else if (nearRight && nearTop)
-                    Cursor = Cursors.SizeNESW;
-                else if (nearLeft && nearBottom)
-                    Cursor = Cursors.SizeNESW;
-                else if (nearRight && nearBottom)
-                    Cursor = Cursors.SizeNWSE;
-                else if (nearLeft || nearRight)
-                    Cursor = Cursors.SizeWE;
-                else if (nearTop || nearBottom)
-                    Cursor = Cursors.SizeNS;
-                else
-                    Cursor = Cursors.Hand;
-                return;
-            }
-
-            // --- Manipulation ---
+            if (!_isManipulating) return;
             if (ActionResize.IsChecked == true) return;
 
-            // pos is already in PreviewCanvas's local (unscaled) coordinate space,
-            // since GetPosition(PreviewCanvas) accounts for the canvas's own RenderTransform.
+            Point pos = e.GetPosition(PreviewCanvas);
             double deltaX = pos.X - _startMousePos.X;
             double deltaY = pos.Y - _startMousePos.Y;
 
@@ -1400,7 +1459,7 @@ namespace ImageCropTool
         private int Clamp(int value, int min, int max) => value < min ? min : (value > max ? max : value);
         private double Clamp(double value, double min, double max) => value < min ? min : (value > max ? max : value);
 
-        private const double EdgeTolerance = 12.0;
+        private const double EdgeTolerance = 20.0;
 
         private void ClampCropRectangle()
         {
@@ -1480,15 +1539,8 @@ namespace ImageCropTool
         private void ZoomInBtn_Click(object sender, RoutedEventArgs e)
         {
             if (_originalImage == null) return;
-            if (_zoomMode == ZoomMode.Fit)
-            {
-                // Start from the current fit scale
-                _customZoom = _currentScale * 1.1;
-            }
-            else
-            {
-                _customZoom *= 1.1;
-            }
+            // Start from the current scale and multiply by 1.1
+            _customZoom = _currentScale * 1.1;
             _zoomMode = ZoomMode.Custom;
             UpdatePreviewTransform();
         }
@@ -1496,14 +1548,8 @@ namespace ImageCropTool
         private void ZoomOutBtn_Click(object sender, RoutedEventArgs e)
         {
             if (_originalImage == null) return;
-            if (_zoomMode == ZoomMode.Fit)
-            {
-                _customZoom = _currentScale / 1.1;
-            }
-            else
-            {
-                _customZoom /= 1.1;
-            }
+            // Start from the current scale and divide by 1.1
+            _customZoom = _currentScale / 1.1;
             if (_customZoom < 0.01) _customZoom = 0.01;
             _zoomMode = ZoomMode.Custom;
             UpdatePreviewTransform();
@@ -2087,6 +2133,52 @@ namespace ImageCropTool
                 System.Diagnostics.Process.Start("explorer.exe", outputFolder);
             }
         }
+        private void LogLayoutInfo()
+        {
+            AppendLog("--- Layout Debug ---\n");
+
+            AppendLog($"Window Width property: {this.Width}\n");
+            AppendLog($"Window ActualWidth: {this.ActualWidth}\n");
+            AppendLog($"Window MinWidth: {this.MinWidth}\n");
+
+            var root = (Grid)this.Content;
+
+            AppendLog($"Column0 ActualWidth: {root.ColumnDefinitions[0].ActualWidth}\n");
+            AppendLog($"Column1 ActualWidth: {root.ColumnDefinitions[1].ActualWidth}\n");
+
+            AppendLog($"RightPanelGrid ActualWidth: {RightPanelGrid.ActualWidth}\n");
+            AppendLog($"PreviewBorder ActualWidth: {PreviewBorder.ActualWidth}\n");
+            AppendLog($"PreviewCanvas ActualWidth: {PreviewCanvas.ActualWidth}\n");
+
+            AppendLog($"VScrollBar ActualWidth: {VScrollBar.ActualWidth}\n");
+            AppendLog($"VScrollBar Margin: {VScrollBar.Margin}\n");
+
+            AppendLog($"HScrollBar ActualWidth: {HScrollBar.ActualWidth}\n");
+
+            AppendLog($"RotateGroupBox ActualWidth: {RotateGroupBox.ActualWidth}\n");
+            AppendLog($"ZoomGroupBox ActualWidth: {ZoomGroupBox.ActualWidth}\n");
+
+            AppendLog($"PreviewBorder MinWidth: {PreviewBorder.MinWidth}\n");
+            AppendLog($"PreviewCanvas MinWidth: {PreviewCanvas.MinWidth}\n");
+
+            AppendLog($"PreviewImage Width: {PreviewImage.Width}\n");
+            AppendLog($"PreviewImage ActualWidth: {PreviewImage.ActualWidth}\n");
+
+            AppendLog($"PreviewImage Source Width: {PreviewImage.Source?.Width}\n");
+            AppendLog($"PreviewImage Source Height: {PreviewImage.Source?.Height}\n");
+            
+            AppendLog($"RightPanelGrid DesiredWidth: {RightPanelGrid.DesiredSize.Width}\n");
+
+            AppendLog($"PreviewBorder DesiredWidth: {PreviewBorder.DesiredSize.Width}\n");
+
+            AppendLog($"RotateGroupBox DesiredWidth: {RotateGroupBox.DesiredSize.Width}\n");
+            AppendLog($"ZoomGroupBox DesiredWidth: {ZoomGroupBox.DesiredSize.Width}\n");
+
+            AppendLog($"Top toolbar desired width: {RotateGroupBox.DesiredSize.Width + ZoomGroupBox.DesiredSize.Width}\n");
+
+            AppendLog("--- End Debug ---\n");
+        }
+
 
     }
 
