@@ -24,7 +24,6 @@ namespace ImageCropTool
             InitializeComponent();
             // Set initial states
 
-            AppendLog($"Constructor Width = {Width}\n"); 
             RefreshCropUI();
             UpdateUnitAvailability();
             UpdateFilenameAvailability();
@@ -39,7 +38,7 @@ namespace ImageCropTool
             ActualSizebtn.Click += ActualSizeBtn_Click;
             AspectRatio.Checked += AspectRatio_Checked;
             AspectRatio.Unchecked += AspectRatio_Checked;
-            CropBtn.Click += CropBtn_Click;
+            ActionBtn.Click += ActionBtn_Click;
             CropOverlay.MouseMove += CropOverlay_MouseMove;
             CropOverlay.MouseUp += CropOverlay_MouseUp;
             CropOverlay.Visibility = Visibility.Hidden;
@@ -59,7 +58,6 @@ namespace ImageCropTool
             PreviewCanvas.MouseLeave += (s, e) => Cursor = Cursors.Arrow;
             PreviewCanvas.PreviewMouseDown += PreviewCanvas_PreviewMouseDown;
             PreviewImage.Loaded += (s, e) => UpdateCropOverlay();
-            PreviewImage.Loaded += (s, e) => LogLayoutInfo();
             PreviewImage.MouseDown += PreviewImage_MouseDown;
             PreviewImage.MouseMove += PreviewImage_MouseMove;
             PreviewImage.MouseUp += PreviewImage_MouseUp;
@@ -69,7 +67,6 @@ namespace ImageCropTool
             Rotate180.Click += (s, e) => { _currentRotation += 180; UpdateDisplayedImage(); };
             RotateMinus90.Click += (s, e) => { _currentRotation -= 90; UpdateDisplayedImage(); };
             RotateMore90.Click += (s, e) => { _currentRotation += 90; UpdateDisplayedImage(); };
-            SrcBox.TextChanged += SrcBox_TextChanged;
             this.PreviewKeyDown += Window_PreviewKeyDown;
             UnitMM.Checked += Unit_CheckedChanged;
             UnitPer.Checked += Unit_CheckedChanged;
@@ -81,7 +78,6 @@ namespace ImageCropTool
             ZoomInBtn.Click += ZoomInBtn_Click;
             ZoomOutBtn.Click += ZoomOutBtn_Click;
             PreviewCanvas.MouseMove += PreviewCanvas_MouseMove;
-            this.Loaded += (s, e) => LogLayoutInfo();
             Loaded += (_, _) => Width = MinWidth;
         }
 
@@ -132,11 +128,6 @@ namespace ImageCropTool
 
             _currentScale = scale;
 
-            // --- Clamp panning so the image can't be dragged out of view ---
-            // Content can only be panned when it's larger than the viewport on that
-            // axis; if it already fits entirely, pan is locked to 0 (top-left aligned,
-            // nothing to scroll) - just like a normal scrollbar disables itself when
-            // there's nothing to scroll.
             double scaledW = sourceWidthPx * scale;
             double scaledH = sourceHeightPx * scale;
 
@@ -151,7 +142,7 @@ namespace ImageCropTool
             _panX = Clamp(_panX, minPanX, maxPanX);
             _panY = Clamp(_panY, minPanY, maxPanY);
 
-            UpdateScrollBars(canvasW, canvasH, scaledW, scaledH);
+            UpdateScrollBars(canvasW, canvasH);
 
             // --- CHANGE: No centering – image is top-left aligned ---
             double totalX = _panX;   // pan offsets only (initialized to 0)
@@ -166,7 +157,7 @@ namespace ImageCropTool
             UpdateCropOverlay();
         }
 
-        private void UpdateScrollBars(double canvasW, double canvasH, double scaledW, double scaledH)
+        private void UpdateScrollBars(double canvasW, double canvasH)
         {
             _suppressScrollSync = true;
 
@@ -264,8 +255,11 @@ namespace ImageCropTool
             // UnitPer should only be available when ActionResize is selected
             bool isResize = ActionResize.IsChecked == true;
             UnitPer.IsEnabled = isResize;
+            UnitPer.IsChecked = isResize;
             StackRatio.IsEnabled = isResize;
             MarginsSettings.IsEnabled = !isResize;
+            ActionBtn.Content = isResize ? "RESIZE IMAGE(S)" : "CROP IMAGE(S)";
+
             if (isResize) { CropOverlay.Visibility = Visibility.Hidden; }
 
             // If UnitPer is selected but now disabled, switch to Pixels
@@ -337,7 +331,8 @@ namespace ImageCropTool
 
             if (dialog.ShowDialog() == true)
             {
-                SetFilePath(dialog.FileName);
+                SrcBox.Text = (dialog.FileName);
+                LoadPath(dialog.FileName);
             }
         }
 
@@ -355,28 +350,40 @@ namespace ImageCropTool
             if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             {
                 string selectedFolder = dialog.SelectedPath;
-
-                string[] extensions =
+                if (selectedFolder != _lastValidSourcePath)
                 {
+                    ValidateSourceFolder(selectedFolder);
+                }
+                               
+            }
+        }
+        private void ValidateSourceFolder(string selectedFolder)
+        {
+            string[] extensions =
+                [
                     "*.jpg","*.jpeg","*.png",
                     "*.bmp","*.gif","*.tiff"
-                };
+                ];
 
-                bool hasImage = extensions.Any(ext =>
-                    Directory.GetFiles(selectedFolder, ext).Length > 0);
+            bool hasImage = extensions.Any(ext =>
+                System.IO.Directory.GetFiles(selectedFolder, ext).Length > 0);
 
-                if (!hasImage)
-                {
-                    System.Windows.MessageBox.Show(
-                        "The selected folder contains no image files.",
-                        "Invalid Folder",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Warning);
-
-                    return;
-                }
-
-                SetFilePath(selectedFolder);
+            if (!hasImage)
+            {
+                System.Windows.MessageBox.Show(
+                    "No image files found in the selected folder.",
+                    "Invalid Folder",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                ActionBtn.IsEnabled = false;
+                SrcBox.Text = _lastValidSourcePath;
+                return;
+            }
+            else
+            {
+                SrcBox.Text = selectedFolder;
+                _lastValidSourcePath = selectedFolder;
+                LoadPath(selectedFolder);
             }
         }
         private void DstBrowse_Click(object sender, RoutedEventArgs e)
@@ -396,7 +403,12 @@ namespace ImageCropTool
 
             if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             {
-                SetOutputPath(dialog.SelectedPath);
+                if (System.IO.Directory.Exists((dialog.SelectedPath)))
+                {
+                    AppendLog($"Output folder: {(dialog.SelectedPath)}\n");
+                    _lastValidOutputPath = (dialog.SelectedPath);
+                    DstBox.Text = (dialog.SelectedPath);
+                }
             }
         }
         private void UpdateSourceFilename()
@@ -439,69 +451,19 @@ namespace ImageCropTool
             NameSource.Text = baseName;
             NameExtension.Text = fileExtension;
         }
-        private void SetFilePath(string filePath)
-        {
-            SrcBox.Text = filePath;
-            SrcBox.FlowDirection = FlowDirection.RightToLeft;
-            SrcBox.TextAlignment = TextAlignment.Right;
-            SrcBox.HorizontalContentAlignment = HorizontalAlignment.Right;
-
-            LoadPath(filePath);
-        }
-        private void SetOutputPath(string filePath)
-        {
-            DstBox.Text = filePath;
-
-            DstBox.FlowDirection = FlowDirection.RightToLeft;
-            DstBox.TextAlignment = TextAlignment.Right;
-            DstBox.HorizontalContentAlignment = HorizontalAlignment.Right;
-
-            if (System.IO.Directory.Exists(filePath))
-            {
-                AppendLog($"Output folder: {filePath}\n");
-            }
-        }
-        private void SrcBox_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            string currentText = SrcBox.Text;
-
-            // Check if it's the default placeholder or empty
-            if (string.IsNullOrEmpty(currentText) || currentText == (string)AppConstants.DefaultSrcBoxText)
-            {
-                // Left align for default text
-                SrcBox.FlowDirection = FlowDirection.LeftToRight;
-                SrcBox.TextAlignment = TextAlignment.Left;
-                SrcBox.HorizontalContentAlignment = HorizontalAlignment.Left;
-            }
-            else
-            {
-                // Check if it looks like a file path (contains backslashes or slashes)
-                if (currentText.Contains('\\'))
-                {
-                    // Right align for file paths
-                    SrcBox.FlowDirection = FlowDirection.RightToLeft;
-                    SrcBox.TextAlignment = TextAlignment.Right;
-                    SrcBox.HorizontalContentAlignment = HorizontalAlignment.Right;
-                }
-                else
-                {
-                    // Keep left alignment for other text
-                    SrcBox.FlowDirection = FlowDirection.LeftToRight;
-                    SrcBox.TextAlignment = TextAlignment.Left;
-                    SrcBox.HorizontalContentAlignment = HorizontalAlignment.Left;
-                }
-                UpdateSourceFilename();
-            }
-        }
-
+        
         private void SrcBox_GotFocus(object sender, RoutedEventArgs e)
         {
             if (SrcBox.Text == (string)AppConstants.DefaultSrcBoxText)
             {
                 SrcBox.Text = "";
-                SrcBox.FlowDirection = FlowDirection.LeftToRight;
-                SrcBox.TextAlignment = TextAlignment.Left;
-                SrcBox.HorizontalContentAlignment = HorizontalAlignment.Left;
+            }
+        }
+        private void DstBox_GotFocus(object sender, RoutedEventArgs e)
+        {
+            if (DstBox.Text == (string)AppConstants.DefaultDstBoxText)
+            {
+                DstBox.Text = "";
             }
         }
 
@@ -512,9 +474,6 @@ namespace ImageCropTool
             {
                 // restore placeholder
                 SrcBox.Text = (string)AppConstants.DefaultSrcBoxText;
-                SrcBox.FlowDirection = FlowDirection.LeftToRight;
-                SrcBox.TextAlignment = TextAlignment.Left;
-                SrcBox.HorizontalContentAlignment = HorizontalAlignment.Left;
                 PreviewImage.Source = null;   // <-- clear preview
                 PreviewImage.Width = 0;
                 PreviewImage.Height = 0;
@@ -526,7 +485,43 @@ namespace ImageCropTool
             // If it's a valid file or folder, load dimensions
             if (System.IO.File.Exists(path) || System.IO.Directory.Exists(path))
             {
-                LoadPath(path);
+                ValidateSourceFolder(path);
+            }
+            else
+            {
+                System.Windows.MessageBox.Show(
+                    "Invalid source path.",
+                    "Invalid Path",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+
+            }
+            SrcBox.Text = _lastValidSourcePath;
+        }
+        private void DstBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            string path = DstBox.Text;
+            if (string.IsNullOrWhiteSpace(path) || path == (string)AppConstants.DefaultDstBoxText)
+            {
+                // restore placeholder
+                DstBox.Text = _lastValidOutputPath;
+                return;
+            }
+
+            if (System.IO.Directory.Exists(path))
+            {
+                _lastValidOutputPath = path;
+                DstBox.Text = _lastValidOutputPath;
+            }
+            else
+            {
+                System.Windows.MessageBox.Show(
+                    "Invalid output folder.",
+                    "Invalid Path",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+
+                DstBox.Text = _lastValidOutputPath;
             }
         }
         private void ModePrefix_Checked(object sender, RoutedEventArgs e)
@@ -594,8 +589,6 @@ namespace ImageCropTool
         private const double Dpi = 96.0;               // Standard screen DPI
         private const double MmPerInch = 25.4;
 
-        // These store the *real* pixel values of the source and current settings.
-        // Initially filled with example values – you'll update these when an image is loaded.
         private int sourceWidthPx = 1000;
         private int sourceHeightPx = 2000;
         private int outputWidthPx = 500;
@@ -616,14 +609,14 @@ namespace ImageCropTool
             return "px";
         }
 
-        private double ConvertPixelsToUnit(int pixels, string unit)
+        private static double ConvertPixelsToUnit(int pixels, string unit)
         {
             if (unit == "px") return pixels;
             if (unit == "mm") return pixels / Dpi * MmPerInch;
             return pixels; // fallback
         }
 
-        private int ConvertUnitToPixels(double value, string unit, bool clampToMin = true)
+        private static int ConvertUnitToPixels(double value, string unit, bool clampToMin = true)
         {
             int result;
             if (unit == "px")
@@ -902,33 +895,40 @@ namespace ImageCropTool
         }
         private void LoadPath(string path)
         {
-            if (File.Exists(path))
+            if (System.IO.File.Exists(path))
             {
                 AppendLog($"Selected file: {Path.GetFileName(path)}\n");
-                LoadPreviewImage(path);   // ✅ loads once, sets dimensions internally
+                ActionBtn.IsEnabled = true;
+                _lastValidSourcePath = path;
+                LoadPreviewImage(path);
             }
-            else if (Directory.Exists(path))
+            else if (System.IO.Directory.Exists(path))
             {
-                AppendLog($"Selected folder: {path}\n");
-                string[] extensions = { "*.jpg", "*.jpeg", "*.png", "*.bmp", "*.gif", "*.tiff" };
+                string[] extensions = ["*.jpg", "*.jpeg", "*.png", "*.bmp", "*.gif", "*.tiff"];
                 bool found = false;
                 foreach (var ext in extensions)
                 {
-                    var files = Directory.GetFiles(path, ext, SearchOption.TopDirectoryOnly);
+                    var files = System.IO.Directory.GetFiles(path, ext, SearchOption.TopDirectoryOnly);
                     if (files.Length > 0)
                     {
                         LoadPreviewImage(files[0]);   // ✅ loads once, sets dimensions internally
                         AppendLog($"Using first image: {Path.GetFileName(files[0])}\n");
                         found = true;
+                        _lastValidSourcePath = path;
                         break;
                     }
                 }
-                if (!found)
-                    AppendLog("No image files found in the folder.\n");
+                if (found)
+                {
+                    AppendLog($"Selected folder: {path}\n");
+                    ActionBtn.IsEnabled = true;
+                }
+
             }
             else
             {
                 AppendLog($"Path not found: {path}\n");
+                ActionBtn.IsEnabled = false;
             }
         }
         private void UpdateCropOverlay()
@@ -1074,10 +1074,7 @@ namespace ImageCropTool
         {
             try
             {
-                var normalizedImage = LoadImageFromFile(filePath);
-                if (normalizedImage == null)
-                    throw new Exception("Failed to load image.");
-
+                var normalizedImage = LoadImageFromFile(filePath) ?? throw new Exception("Failed to load image.");
                 _originalImage = normalizedImage;
                 _currentRotation = 0;
                 _previousRotation = 0;
@@ -1157,7 +1154,7 @@ namespace ImageCropTool
             }
             PreviewImage.Source = display;
         }
-        private (int w, int h) FindBestAspectRatioPair(int targetW, int targetH, int sourceW, int sourceH, int searchRadius = 5)
+        private static (int w, int h) FindBestAspectRatioPair(int targetW, int targetH, int sourceW, int sourceH, int searchRadius = 5)
         {
             double bestCost = double.MaxValue;
             int bestW = Math.Max(1, targetW);
@@ -1283,8 +1280,6 @@ namespace ImageCropTool
                 cursor = Cursors.SizeWE;
             else if (nearTop || nearBottom)
                 cursor = Cursors.SizeNS;
-            else
-                cursor = Cursors.Arrow;
 
             Cursor = cursor;
         }
@@ -1456,8 +1451,11 @@ namespace ImageCropTool
                 RefreshCropUI(); // updates UI and overlay position
             }
         }
-        private int Clamp(int value, int min, int max) => value < min ? min : (value > max ? max : value);
-        private double Clamp(double value, double min, double max) => value < min ? min : (value > max ? max : value);
+        private static int Clamp(int value, int min, int max) => value < min ? min : (value > max ? max : value);
+        private static double Clamp(double value, double min, double max)
+        {
+            return value < min ? min : (value > max ? max : value);
+        }
 
         private const double EdgeTolerance = 20.0;
 
@@ -1683,7 +1681,7 @@ namespace ImageCropTool
 
 
 
-        private async void CropBtn_Click(object sender, RoutedEventArgs e)
+        private async void ActionBtn_Click(object sender, RoutedEventArgs e)
         {
             if (_originalImage == null)
             {
@@ -1706,7 +1704,7 @@ namespace ImageCropTool
             {
                 outputFolder = dstPath;
             }
-            else if (Directory.Exists(srcPath))
+            else if (System.IO.Directory.Exists(srcPath))
             {
                 outputFolder = srcPath; // use source folder if no output specified
             }
@@ -1716,19 +1714,14 @@ namespace ImageCropTool
             }
 
             // Check if source is a folder
-            if (Directory.Exists(srcPath))
+            if (System.IO.Directory.Exists(srcPath))
             {
                 // Batch processing
-                string[] extensions = { "*.jpg", "*.jpeg", "*.png", "*.bmp", "*.gif", "*.tiff" };
+                string[] extensions = ["*.jpg", "*.jpeg", "*.png", "*.bmp", "*.gif", "*.tiff"];
                 var files = new List<string>();
                 foreach (var ext in extensions)
                 {
-                    files.AddRange(Directory.GetFiles(srcPath, ext, SearchOption.TopDirectoryOnly));
-                }
-                if (files.Count == 0)
-                {
-                    AppendLog("No image files found in the selected folder.\n");
-                    return;
+                    files.AddRange(System.IO.Directory.GetFiles(srcPath, ext, SearchOption.TopDirectoryOnly));
                 }
 
                 AppendLog($"Starting batch crop for {files.Count} images...\n");
@@ -1793,7 +1786,7 @@ namespace ImageCropTool
                 string saveFileName = finalBase + ext;
                 string savePath = Path.Combine(outputFolder, saveFileName);
 
-                if (File.Exists(savePath) && OverwriteChk.IsChecked == false)
+                if (System.IO.File.Exists(savePath) && OverwriteChk.IsChecked == false)
                 {
                     var res = System.Windows.MessageBox.Show(
                         $"File already exists:\n{savePath}\nOverwrite?",
@@ -1843,7 +1836,7 @@ namespace ImageCropTool
             }
         }
 
-        private BitmapSource? LoadImageFromFile(string filePath)
+        private static BitmapSource? LoadImageFromFile(string filePath)
         {
             try
             {
@@ -1922,8 +1915,7 @@ namespace ImageCropTool
                 return null;
             }
         }
-        private BitmapSource CropSingleImage(BitmapSource source, double rotationAngle,
-                                     int cropX, int cropY, int cropW, int cropH)
+        private static CroppedBitmap CropSingleImage(BitmapSource source, double rotationAngle, int cropX, int cropY, int cropW, int cropH)
         {
             BitmapSource rotated = source;
             if (Math.Abs(rotationAngle % 360) > 0.001)
@@ -1933,7 +1925,6 @@ namespace ImageCropTool
                 rotated.Freeze();
             }
 
-            // Ensure crop rectangle is within bounds
             int rw = rotated.PixelWidth;
             int rh = rotated.PixelHeight;
             cropX = Math.Max(0, Math.Min(cropX, rw - 1));
@@ -1948,6 +1939,7 @@ namespace ImageCropTool
         }
         private async System.Threading.Tasks.Task ProcessBatchAsync(string folderPath, string outputFolder, List<string> files)
         {
+            ArgumentNullException.ThrowIfNull(folderPath);
             // Compute relative crop ratios from the current (first image) dimensions
             double leftRatio = (double)marginLeftPx / sourceWidthPx;
             double topRatio = (double)marginTopPx / sourceHeightPx;
@@ -2033,7 +2025,7 @@ namespace ImageCropTool
 
                 // Handle overwrite conflicts if not overwriting
                 // Check for conflict
-                if (!OverwriteChk.IsChecked == true && File.Exists(savePath))
+                if (!OverwriteChk.IsChecked == true && System.IO.File.Exists(savePath))
                 {
                     if (batchAction.HasValue)
                     {
@@ -2053,8 +2045,10 @@ namespace ImageCropTool
                     else
                     {
                         // Show the dialog
-                        var dialog = new OverwritePromptDialog();
-                        dialog.Owner = this;
+                        var dialog = new OverwritePromptDialog
+                        {
+                            Owner = this
+                        };
                         bool? result = dialog.ShowDialog();
                         if (result == true)
                         {
@@ -2179,6 +2173,10 @@ namespace ImageCropTool
             AppendLog("--- End Debug ---\n");
         }
 
+        private string _lastValidSourcePath = AppConstants.DefaultSrcBoxText;
+        private string _lastValidOutputPath = AppConstants.DefaultDstBoxText;
+
+        
 
     }
 

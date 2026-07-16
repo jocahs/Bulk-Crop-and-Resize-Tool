@@ -93,7 +93,9 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBox x:Name="SrcBox" Grid.Column="0" Margin="0,0,5,0" 
+                <TextBox x:Name="SrcBox" 
+                     Grid.Column="0" 
+                     Margin="0,0,5,0" 
                      Text="{x:Static local:AppConstants.DefaultSrcBoxText}" 
                      Foreground="DarkOrange" 
                      TextAlignment="Left"
@@ -101,7 +103,12 @@
                      HorizontalContentAlignment="Left"
                      GotFocus="SrcBox_GotFocus"
                      LostFocus="SrcBox_LostFocus"
-                     TextChanged="SrcBox_TextChanged" FontStyle="Italic" FontWeight="Bold" TextWrapping="Wrap" Height="35" BorderBrush="DarkOrange" BorderThickness="2"/>
+                     FontStyle="Italic" 
+                     FontWeight="Bold" 
+                     TextWrapping="Wrap" 
+                     Height="35" 
+                     BorderBrush="DarkOrange" 
+                     BorderThickness="2"/>
                 <Button Grid.Column="1" Style="{StaticResource ActionButtonStyle}" Content="Browse" Click="SrcBrowse_Click" />
             </Grid>           
             <Label Content="Output folder:" FontWeight="Bold" Margin="0,0,0,0" HorizontalAlignment="Left"/>
@@ -111,7 +118,20 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBox x:Name="DstBox" Grid.Column="0" Margin="0,0,5,0" Text="{x:Static local:AppConstants.DefaultDstBoxText}" VerticalContentAlignment="Center" FontStyle="Italic" Foreground="MediumPurple" FontWeight="Bold" TextWrapping="Wrap" Height="35" BorderBrush="MediumPurple" BorderThickness="2"/>
+                <TextBox x:Name="DstBox" 
+                  Grid.Column="0" 
+                  Margin="0,0,5,0" 
+                  Text="{x:Static local:AppConstants.DefaultDstBoxText}" 
+                  VerticalContentAlignment="Center" 
+                  FontStyle="Italic" 
+                  Foreground="MediumPurple" 
+                  FontWeight="Bold" 
+                  TextWrapping="Wrap" 
+                  Height="35" 
+                  GotFocus="DstBox_GotFocus"
+                  LostFocus="DstBox_LostFocus"
+                  BorderBrush="MediumPurple" 
+                  BorderThickness="2"/>
                 <Button Grid.Column="1"  Style="{StaticResource ActionButtonStyle}" Content="Browse" Click="DstBrowse_Click" />
             </Grid>
 
@@ -307,7 +327,7 @@
                 <DockPanel Grid.Row="0" Margin="0,5,0,5">
                     <Button x:Name="ResetBtn" Content="Reset Settings" Style="{StaticResource ActionButtonStyle}" DockPanel.Dock="Left"/>
                     <Button x:Name="ResetAll" Content="Reset All" Style="{StaticResource ActionButtonStyle}" DockPanel.Dock="Left" Background="DarkOrange"/>
-                    <Button x:Name="CropBtn" Content="CROP IMAGES" Width="100" Style="{StaticResource ActionButtonStyle}" Background="LightSeaGreen" DockPanel.Dock="Right"/>
+                    <Button x:Name="ActionBtn" Content="CROP IMAGE(S)" Width="120" Style="{StaticResource ActionButtonStyle}"  IsEnabled="False" Background="LightSeaGreen" DockPanel.Dock="Right" FontWeight="Bold"/>
                     <Button x:Name="CancelBtn" Content="Cancel" Style="{StaticResource ActionButtonStyle}" IsEnabled="False" DockPanel.Dock="Right"  Width="100"  Background="red" HorizontalAlignment="Right"/>                    
                 </DockPanel>
             </Grid>
