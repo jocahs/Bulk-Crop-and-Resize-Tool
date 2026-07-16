@@ -1,0 +1,26 @@
+<Window x:Class="ImageCropTool.OverwritePromptDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="File Exists"
+        Width="450" Height="160"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <TextBlock Grid.Row="0" Text="The file already exists. What do you want to do?" 
+                   FontWeight="Bold" Margin="0,0,0,10" TextWrapping="Wrap"/>
+        <WrapPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Button x:Name="OverwriteBtn" Content="Overwrite" Width="80" Margin="0,0,10,5" 
+                    Click="OverwriteBtn_Click" IsDefault="True"/>
+            <Button x:Name="SkipBtn" Content="Skip" Width="80" Margin="0,0,10,5" 
+                    Click="SkipBtn_Click"/>
+            <Button x:Name="OverwriteAllBtn" Content="Overwrite All" Width="100" Margin="0,0,10,5" 
+                    Click="OverwriteAllBtn_Click"/>
+            <Button x:Name="SkipAllBtn" Content="Skip All" Width="80" Margin="0,0,0,5" 
+                    Click="SkipAllBtn_Click"/>
+        </WrapPanel>
+    </Grid>
+</Window>

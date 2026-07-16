@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -1044,28 +1045,23 @@ namespace ImageCropTool
         {
             try
             {
-                var bitmap = new BitmapImage();
-                bitmap.BeginInit();
-                bitmap.UriSource = new Uri(filePath);
-                bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                bitmap.DecodePixelWidth = 0;
-                bitmap.EndInit();
-                bitmap.Freeze();
+                var normalizedImage = LoadImageFromFile(filePath);
+                if (normalizedImage == null)
+                    throw new Exception("Failed to load image.");
 
-                _originalImage = bitmap;
+                _originalImage = normalizedImage;
                 _currentRotation = 0;
                 _previousRotation = 0;
 
-                int w = bitmap.PixelWidth;
-                int h = bitmap.PixelHeight;
+                int w = normalizedImage.PixelWidth;
+                int h = normalizedImage.PixelHeight;
 
-                // Force image to render at pixel size (ignores DPI)
                 PreviewImage.Width = w;
                 PreviewImage.Height = h;
 
                 SetSourceDimensions(w, h);
                 UpdatePreviewTransform();
-                UpdateDisplayedImage();
+                UpdateDisplayedImage(); // now the image is already normalized, so this will apply the manual rotation (0° by default)
                 _currentImagePath = filePath;
                 CropOverlay.Visibility = Visibility.Visible;
             }
@@ -1800,18 +1796,80 @@ namespace ImageCropTool
                 AppendLog($"Crop failed: {ex.Message}\n");
             }
         }
+
         private BitmapSource? LoadImageFromFile(string filePath)
         {
             try
             {
+                int orientation = 1;
+
+                // 1. Read EXIF orientation using FileStream + System.Drawing
+                using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                using (var img = System.Drawing.Image.FromStream(fs, false, false))
+                {
+                    var prop = img.PropertyItems.FirstOrDefault(p => p.Id == 0x0112);
+                    if (prop != null && prop.Value != null && prop.Value.Length >= 2)
+                    {
+                        orientation = BitConverter.ToUInt16(prop.Value, 0);
+                    }
+                }
+
+                // 2. Load the image as BitmapSource (full resolution)
                 var bitmap = new BitmapImage();
                 bitmap.BeginInit();
-                bitmap.UriSource = new Uri(filePath);
+                // Use a fresh FileStream to load the image – this allows the file to be shared
+                bitmap.StreamSource = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
                 bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                bitmap.DecodePixelWidth = 0;
+                bitmap.DecodePixelWidth = 0; // load full resolution
                 bitmap.EndInit();
                 bitmap.Freeze();
-                return bitmap;
+
+                BitmapSource source = bitmap;
+                double w = source.PixelWidth;
+                double h = source.PixelHeight;
+
+                // 3. Apply EXIF transformation
+                var transform = new TransformGroup();
+                switch (orientation)
+                {
+                    case 2: // Mirror horizontally
+                        transform.Children.Add(new ScaleTransform(-1, 1));
+                        transform.Children.Add(new TranslateTransform(w, 0));
+                        break;
+                    case 3: // Rotate 180°
+                        transform.Children.Add(new RotateTransform(180));
+                        break;
+                    case 4: // Mirror vertically
+                        transform.Children.Add(new ScaleTransform(1, -1));
+                        transform.Children.Add(new TranslateTransform(0, h));
+                        break;
+                    case 5: // Rotate 90° CW + Mirror horizontally
+                        transform.Children.Add(new RotateTransform(90));
+                        transform.Children.Add(new ScaleTransform(-1, 1));
+                        transform.Children.Add(new TranslateTransform(h, 0));
+                        break;
+                    case 6: // Rotate 90° CW
+                        transform.Children.Add(new RotateTransform(90));
+                        break;
+                    case 7: // Rotate 90° CW + Mirror vertically
+                        transform.Children.Add(new RotateTransform(90));
+                        transform.Children.Add(new ScaleTransform(1, -1));
+                        transform.Children.Add(new TranslateTransform(0, w));
+                        break;
+                    case 8: // Rotate 270° CW
+                        transform.Children.Add(new RotateTransform(270));
+                        break;
+                    default:
+                        break;
+                }
+
+                if (transform.Children.Count > 0)
+                {
+                    source = new TransformedBitmap(source, transform);
+                    source.Freeze();
+                }
+
+                return source;
             }
             catch
             {
@@ -1859,6 +1917,8 @@ namespace ImageCropTool
             // Precompute rotation angle
             double angle = _currentRotation % 360;
 
+            OverwriteAction? batchAction = null; // stores the user's choice for the batch
+            
             foreach (string filePath in files)
             {
                 // Check for cancellation (you can implement later)
@@ -1926,17 +1986,67 @@ namespace ImageCropTool
                 string savePath = Path.Combine(outputFolder, saveFileName);
 
                 // Handle overwrite conflicts if not overwriting
+                // Check for conflict
                 if (!OverwriteChk.IsChecked == true && File.Exists(savePath))
                 {
-                    int count = 1;
-                    while (File.Exists(savePath))
+                    if (batchAction.HasValue)
                     {
-                        saveFileName = $"{finalBase}_{count}{ext}";
-                        savePath = Path.Combine(outputFolder, saveFileName);
-                        count++;
+                        // Use stored decision (Skip or OverwriteAll)
+                        if (batchAction.Value == OverwriteAction.OverwriteAll)
+                        {
+                            // Proceed to save (overwrite)
+                        }
+                        else if (batchAction.Value == OverwriteAction.SkipAll)
+                        {
+                            AppendLog($"Skipped: {saveFileName} (already exists)\n");
+                            processed++;
+                            Progress.Value = processed;
+                            continue;
+                        }
+                    }
+                    else
+                    {
+                        // Show the dialog
+                        var dialog = new OverwritePromptDialog();
+                        dialog.Owner = this;
+                        bool? result = dialog.ShowDialog();
+                        if (result == true)
+                        {
+                            var action = dialog.Result;
+                            if (action == OverwriteAction.Skip)
+                            {
+                                AppendLog($"Skipped: {saveFileName} (already exists)\n");
+                                processed++;
+                                Progress.Value = processed;
+                                continue;
+                            }
+                            else if (action == OverwriteAction.Overwrite)
+                            {
+                                
+                            }
+                            else if (action == OverwriteAction.OverwriteAll)
+                            {
+                                batchAction = OverwriteAction.OverwriteAll;
+                                // Proceed to save (overwrite current and all future)
+                            }
+                            else if (action == OverwriteAction.SkipAll)
+                            {
+                                batchAction = OverwriteAction.SkipAll;
+                                AppendLog($"Skipped: {saveFileName} (already exists)\n");
+                                processed++;
+                                Progress.Value = processed;
+                                continue;
+                            }
+                        }
+                        else
+                        {
+                            AppendLog($"Skipped: {saveFileName} (no action)\n");
+                            processed++;
+                            Progress.Value = processed;
+                            continue;
+                        }
                     }
                 }
-
                 // Save
                 try
                 {
