@@ -1,6 +1,6 @@
 ﻿using System.Windows;
 
-namespace BulkCropAndResizeTool
+namespace BulkCropAndResizeTool.Dialogs
 {
     public partial class FileFolderDialog : Window
     {

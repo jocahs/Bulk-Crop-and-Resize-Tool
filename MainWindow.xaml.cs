@@ -12,13 +12,14 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using Xceed.Wpf.Toolkit;
 
+using BulkCropAndResizeTool.Dialogs;
+using BulkCropAndResizeTool.Helpers;
+using BulkCropAndResizeTool.Models;
+//using BulkCropAndResizeTool.Resources;
+//using BulkCropAndResizeTool.Services;
+
 namespace BulkCropAndResizeTool
 {
-    public static class AppConstants
-    {
-        public const string DefaultSrcBoxText = "Write/Paste or Browse the source path of a file/folder ----->";
-        public const string DefaultDstBoxText = "Write/Paste or Browse if different from Source folder ------>";
-    }
     public partial class MainWindow : Window
     {
         
@@ -369,11 +370,7 @@ namespace BulkCropAndResizeTool
         }
         private void ValidateSourceFolder(string selectedFolder)
         {
-            string[] extensions =
-                [
-                    "*.jpg","*.jpeg","*.png",
-                    "*.bmp","*.gif","*.tiff"
-                ];
+            string[] extensions = (string[])AppConstants.ImageExtensions.Clone();
             
             bool hasImage = extensions.Any(ext =>
                 System.IO.Directory.GetFiles(selectedFolder, ext).Length > 0);
@@ -426,12 +423,12 @@ namespace BulkCropAndResizeTool
             // If the text is empty or the placeholder, show "filename"
             if (string.IsNullOrEmpty(path) || path == (string)AppConstants.DefaultSrcBoxText)
             {
-                NameSource.Text = "filename";
+                NameSource.Text = (string)AppConstants.DefaultFilename;
                 return;
             }
 
-            string baseName = "filename";
-            string fileExtension = ".jpg";
+            string baseName = (string)AppConstants.DefaultFilename;
+            string fileExtension = (string)AppConstants.DefaultExtension;
 
             if (System.IO.File.Exists(path))
             {
@@ -442,7 +439,7 @@ namespace BulkCropAndResizeTool
             else if (System.IO.Directory.Exists(path))
             {
                 // It's a folder – find the first image file
-                string[] extensions = ["*.jpg", "*.jpeg", "*.png", "*.bmp", "*.gif", "*.tiff"];
+                string[] extensions = (string[])AppConstants.ImageExtensions.Clone();
                 foreach (var ext in extensions)
                 {
                     var files = System.IO.Directory.GetFiles(path, ext, System.IO.SearchOption.TopDirectoryOnly);
@@ -454,6 +451,10 @@ namespace BulkCropAndResizeTool
                     }
                 }
                 // If no image is found, baseName stays "filename"
+                if (baseName == (string)AppConstants.DefaultFilename)
+                {
+                    fileExtension = (string)AppConstants.DefaultExtension;
+                }
             }
 
             NameSource.Text = baseName;
@@ -650,14 +651,14 @@ namespace BulkCropAndResizeTool
             // Determine default text for PreSufBox
             string defaultText;
             if (isResize)
-                defaultText = isPrefix ? "resized_" : "_resized";
+                defaultText = isPrefix ? (string)AppConstants.DefaultResizePrefix : (string)AppConstants.DefaultResizeSuffix;
             else
-                defaultText = isPrefix ? "cropped_" : "_cropped";
+                defaultText = isPrefix ? (string)AppConstants.DefaultCropPrefix : (string)AppConstants.DefaultCropSuffix;
 
             // Preserve user custom text
             string currentText = PreSufBox.Text;
-            bool isDefaultText = currentText == "_cropped" || currentText == "_resized" ||
-                                 currentText == "cropped_" || currentText == "resized_";
+            bool isDefaultText = currentText == (string)AppConstants.DefaultCropSuffix || currentText == (string)AppConstants.DefaultCropPrefix ||
+                                 currentText == (string)AppConstants.DefaultResizeSuffix || currentText == (string)AppConstants.DefaultResizePrefix;
             if (!isDefaultText)
                 userCustomText = currentText;
 
@@ -1010,7 +1011,7 @@ namespace BulkCropAndResizeTool
             }
             else if (System.IO.Directory.Exists(path))
             {
-                string[] extensions = ["*.jpg", "*.jpeg", "*.png", "*.bmp", "*.gif", "*.tiff"];
+                string[] extensions = (string[])AppConstants.ImageExtensions.Clone();
                 bool found = false;
                 foreach (var ext in extensions)
                 {
@@ -1776,9 +1777,7 @@ namespace BulkCropAndResizeTool
 
                 bool isResize = ActionResize.IsChecked == true;
                 bool isPrefix = ModePrefix.IsChecked == true;
-                string defaultText = isResize
-                    ? (isPrefix ? "resized_" : "_resized")
-                    : (isPrefix ? "cropped_" : "_cropped");
+                string defaultText = isResize ? (isPrefix ? (string) AppConstants.DefaultResizePrefix : (string)AppConstants.DefaultResizeSuffix) : (isPrefix ? (string)AppConstants.DefaultCropPrefix : (string)AppConstants.DefaultCropSuffix);
 
                 // Update text without re-entrancy issues
                 textBox.Text = defaultText;
@@ -1817,7 +1816,7 @@ namespace BulkCropAndResizeTool
             // --- BATCH PROCESSING if source is a folder ---
             if (Directory.Exists(SrcBox.Text))
             {
-                string[] extensions = ["*.jpg", "*.jpeg", "*.png", "*.bmp", "*.gif", "*.tiff"];
+                string[] extensions = (string[])AppConstants.ImageExtensions.Clone();
                 var files = new List<string>();
                 foreach (var pattern in extensions)   // <-- changed 'ext' to 'pattern'
                     files.AddRange(Directory.GetFiles(SrcBox.Text, pattern, SearchOption.TopDirectoryOnly));
@@ -1910,7 +1909,7 @@ namespace BulkCropAndResizeTool
             // --- Save the processed image (common for both) ---
             string originalName = string.IsNullOrEmpty(_currentImagePath) ? "image" :  System.IO.Path.GetFileName(_currentImagePath);
             string ext =  System.IO.Path.GetExtension(originalName);
-            if (string.IsNullOrWhiteSpace(ext)) ext = ".jpg";
+            if (string.IsNullOrWhiteSpace(ext)) ext = (string)AppConstants.DefaultExtension;
 
             string finalBase;
             string PreSufFromUI = (PreSufBox.Text ?? "").Trim();
@@ -2175,7 +2174,7 @@ namespace BulkCropAndResizeTool
                 string originalName = System.IO.Path.GetFileName(filePath);
                 string baseName =System.IO.Path.GetFileNameWithoutExtension(originalName);
                 string ext =System.IO.Path.GetExtension(originalName);
-                if (string.IsNullOrEmpty(ext)) ext = ".jpg";
+                if (string.IsNullOrEmpty(ext)) ext = (string)AppConstants.DefaultExtension;
 
                 string finalBase;
                 string PreSufFromUI = (PreSufBox.Text ?? "").Trim();

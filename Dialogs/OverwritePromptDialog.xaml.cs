@@ -1,6 +1,6 @@
 using System.Windows;
 
-namespace BulkCropAndResizeTool
+namespace BulkCropAndResizeTool.Dialogs
 {
     public enum OverwriteAction
     {

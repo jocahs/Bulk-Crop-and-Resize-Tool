@@ -7,7 +7,8 @@
         ResizeMode="CanResize"
         xmlns:sys="clr-namespace:System;assembly=mscorlib"
         xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
-        xmlns:local="clr-namespace:BulkCropAndResizeTool">
+        xmlns:local="clr-namespace:BulkCropAndResizeTool" 
+        xmlns:helpers="clr-namespace:BulkCropAndResizeTool.Helpers">
 
 
     <Window.Resources>
@@ -96,7 +97,7 @@
                 <TextBox x:Name="SrcBox" 
                      Grid.Column="0" 
                      Margin="0,0,5,0" 
-                     Text="{x:Static local:AppConstants.DefaultSrcBoxText}" 
+                     Text="{x:Static helpers:AppConstants.DefaultSrcBoxText}" 
                      Foreground="DarkOrange" 
                      TextAlignment="Left"
                      VerticalContentAlignment="Center"
@@ -121,7 +122,7 @@
                 <TextBox x:Name="DstBox" 
                   Grid.Column="0" 
                   Margin="0,0,5,0" 
-                  Text="{x:Static local:AppConstants.DefaultDstBoxText}" 
+                  Text="{x:Static helpers:AppConstants.DefaultDstBoxText}" 
                   VerticalContentAlignment="Center" 
                   FontStyle="Italic" 
                   Foreground="MediumPurple" 
