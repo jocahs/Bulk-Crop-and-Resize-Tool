@@ -1,13 +1,13 @@
-﻿<Window x:Class="ImageCropTool.MainWindow"
+﻿<Window x:Class="BulkCropAndResizeTool.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Image Crop Tool by João Silva"
+        Title="Bulk Crop and Resize Tool by João Silva"
         MinWidth="1085" MinHeight="745" 
         WindowStartupLocation="CenterScreen"
         ResizeMode="CanResize"
         xmlns:sys="clr-namespace:System;assembly=mscorlib"
         xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
-        xmlns:local="clr-namespace:ImageCropTool">
+        xmlns:local="clr-namespace:BulkCropAndResizeTool">
 
 
     <Window.Resources>

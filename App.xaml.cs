@@ -2,7 +2,7 @@
 using System.Data;
 using System.Windows;
 
-namespace ImageCropTool;
+namespace BulkCropAndResizeTool;
 
 /// <summary>
 /// Interaction logic for App.xaml

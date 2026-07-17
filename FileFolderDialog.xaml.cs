@@ -1,6 +1,6 @@
 ﻿using System.Windows;
 
-namespace ImageCropTool
+namespace BulkCropAndResizeTool
 {
     public partial class FileFolderDialog : Window
     {

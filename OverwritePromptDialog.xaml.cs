@@ -1,6 +1,6 @@
 using System.Windows;
 
-namespace ImageCropTool
+namespace BulkCropAndResizeTool
 {
     public enum OverwriteAction
     {
