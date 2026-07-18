@@ -93,7 +93,7 @@ namespace BulkCropAndResizeTool
         {
             Width = MinWidth;
         }
-        
+
         #endregion
 
         #region Image Loading
@@ -245,6 +245,80 @@ namespace BulkCropAndResizeTool
             }
 
 
+        }
+        private static BitmapSource? ResizeImage(BitmapSource source, int targetWidth, int targetHeight)
+        {
+            if (source == null) return null;
+            if (targetWidth <= 0 || targetHeight <= 0) return source;
+            double scaleX = targetWidth / (double)source.PixelWidth;
+            double scaleY = targetHeight / (double)source.PixelHeight;
+            var transform = new ScaleTransform(scaleX, scaleY);
+            var resized = new TransformedBitmap(source, transform);
+            resized.Freeze();
+            return resized;
+        }
+        private void UpdatePreviewTransform()
+        {
+            if (_originalImage == null || sourceWidthPx <= 0 || sourceHeightPx <= 0)
+            {
+                PreviewCanvas.RenderTransform = null;
+                _currentScale = 1.0;
+                UpdateZoomLabel();
+                ResetScrollBars();
+                return;
+            }
+
+            double canvasW = PreviewCanvas.ActualWidth;   // 600
+            double canvasH = PreviewCanvas.ActualHeight;  // 600
+            double scale = 1.0;
+            switch (_zoomMode)
+            {
+                case ZoomMode.Fit:
+                    double scaleX = canvasW / sourceWidthPx;
+                    double scaleY = canvasH / sourceHeightPx;
+                    scale = Math.Min(scaleX, scaleY);
+                    break;
+                case ZoomMode.Actual:
+                    scale = 1.0;
+                    break;
+                case ZoomMode.Custom:
+                    scale = _customZoom;
+                    break;
+            }
+
+            // Clamp scale to avoid extreme values
+            if (scale < 0.01) scale = 0.01;
+            if (scale > 100) scale = 100;
+
+            _currentScale = scale;
+
+            double scaledW = sourceWidthPx * scale;
+            double scaledH = sourceHeightPx * scale;
+
+            double minPanX = scaledW > canvasW ? (canvasW - scaledW) : 0;
+            double maxPanX = 0;
+            double minPanY = scaledH > canvasH ? (canvasH - scaledH) : 0;
+            double maxPanY = 0;
+
+            _minPanX = minPanX; _maxPanX = maxPanX;
+            _minPanY = minPanY; _maxPanY = maxPanY;
+
+            _panX = Clamp(_panX, minPanX, maxPanX);
+            _panY = Clamp(_panY, minPanY, maxPanY);
+
+            UpdateScrollBars(canvasW, canvasH);
+
+            // --- CHANGE: No centering – image is top-left aligned ---
+            double totalX = _panX;   // pan offsets only (initialized to 0)
+            double totalY = _panY;
+
+            var group = new TransformGroup();
+            group.Children.Add(new ScaleTransform(scale, scale));
+            group.Children.Add(new TranslateTransform(totalX, totalY));
+            PreviewCanvas.RenderTransform = group;
+
+            UpdateZoomLabel();
+            UpdateCropOverlay();
         }
 
         #endregion
@@ -687,6 +761,30 @@ namespace BulkCropAndResizeTool
                     return;
 
                 OverwriteChk.IsChecked = true;
+            }
+        }
+        private void NoOverwrite_CheckedChanged(object sender, RoutedEventArgs e)
+        {
+            UpdateFilenameAvailability();
+        }
+        private string? userCustomText = null; // Store user custom text
+        private void LayoutPositioning()
+        {
+            bool isPrefix = ModePrefix.IsChecked == true;
+
+            if (isPrefix)
+            {
+                NameStackPanel.Children.Clear();
+                NameStackPanel.Children.Add(PreSufBox);
+                NameStackPanel.Children.Add(NameSource);
+                NameStackPanel.Children.Add(NameExtension);
+            }
+            else
+            {
+                NameStackPanel.Children.Clear();
+                NameStackPanel.Children.Add(NameSource);
+                NameStackPanel.Children.Add(PreSufBox);
+                NameStackPanel.Children.Add(NameExtension);
             }
         }
 
@@ -1351,69 +1449,7 @@ namespace BulkCropAndResizeTool
         private bool _isPanning = false;
         private Point _panStartMouse;
         private double _panStartX, _panStartY;
-        private void UpdatePreviewTransform()
-        {
-            if (_originalImage == null || sourceWidthPx <= 0 || sourceHeightPx <= 0)
-            {
-                PreviewCanvas.RenderTransform = null;
-                _currentScale = 1.0;
-                UpdateZoomLabel();
-                ResetScrollBars();
-                return;
-            }
-
-            double canvasW = PreviewCanvas.ActualWidth;   // 600
-            double canvasH = PreviewCanvas.ActualHeight;  // 600
-            double scale = 1.0;
-            switch (_zoomMode)
-            {
-                case ZoomMode.Fit:
-                    double scaleX = canvasW / sourceWidthPx;
-                    double scaleY = canvasH / sourceHeightPx;
-                    scale = Math.Min(scaleX, scaleY);
-                    break;
-                case ZoomMode.Actual:
-                    scale = 1.0;
-                    break;
-                case ZoomMode.Custom:
-                    scale = _customZoom;
-                    break;
-            }
-
-            // Clamp scale to avoid extreme values
-            if (scale < 0.01) scale = 0.01;
-            if (scale > 100) scale = 100;
-
-            _currentScale = scale;
-
-            double scaledW = sourceWidthPx * scale;
-            double scaledH = sourceHeightPx * scale;
-
-            double minPanX = scaledW > canvasW ? (canvasW - scaledW) : 0;
-            double maxPanX = 0;
-            double minPanY = scaledH > canvasH ? (canvasH - scaledH) : 0;
-            double maxPanY = 0;
-
-            _minPanX = minPanX; _maxPanX = maxPanX;
-            _minPanY = minPanY; _maxPanY = maxPanY;
-
-            _panX = Clamp(_panX, minPanX, maxPanX);
-            _panY = Clamp(_panY, minPanY, maxPanY);
-
-            UpdateScrollBars(canvasW, canvasH);
-
-            // --- CHANGE: No centering – image is top-left aligned ---
-            double totalX = _panX;   // pan offsets only (initialized to 0)
-            double totalY = _panY;
-
-            var group = new TransformGroup();
-            group.Children.Add(new ScaleTransform(scale, scale));
-            group.Children.Add(new TranslateTransform(totalX, totalY));
-            PreviewCanvas.RenderTransform = group;
-
-            UpdateZoomLabel();
-            UpdateCropOverlay();
-        }
+        private const double EdgeTolerance = 20.0;
         private void UpdateScrollBars(double canvasW, double canvasH)
         {
             _suppressScrollSync = true;
@@ -1575,7 +1611,87 @@ namespace BulkCropAndResizeTool
                 e.Handled = true;
             }
         }
+        private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            // Only handle when Crop mode is active and overlay is visible
+            if (ActionCrop.IsChecked != true || CropOverlay.Visibility != Visibility.Visible)
+                return;
 
+            // Ignore if the user is currently dragging with the mouse
+            if (_isManipulating)
+                return;
+
+            // Determine step size
+            int step = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? 10 : 1;
+
+            int dx = 0, dy = 0;
+
+            switch (e.Key)
+            {
+                case Key.Left: dx = -step; break;
+                case Key.Right: dx = step; break;
+                case Key.Up: dy = -step; break;
+                case Key.Down: dy = step; break;
+                default: return; // not an arrow key
+            }
+
+            MoveOverlay(dx, dy);
+            e.Handled = true; // prevent other actions
+        }
+        private void MoveOverlay(int dx, int dy)
+        {
+            // Calculate new margins
+            int newLeft = marginLeftPx + dx;
+            int newTop = marginTopPx + dy;
+
+            // Clamp to keep the overlay inside the image
+            newLeft = Clamp(newLeft, 0, sourceWidthPx - outputWidthPx);
+            newTop = Clamp(newTop, 0, sourceHeightPx - outputHeightPx);
+
+            // Only update if changed
+            if (newLeft != marginLeftPx || newTop != marginTopPx)
+            {
+                marginLeftPx = newLeft;
+                marginTopPx = newTop;
+                RefreshCropUI(); // updates UI and overlay position
+            }
+        }
+        private void ClampCropRectangle()
+        {
+            // Prevent invalid sizes
+            outputWidthPx = Math.Max(1, outputWidthPx);
+            outputHeightPx = Math.Max(1, outputHeightPx);
+
+            // Crop mode cannot exceed source image
+            if (ActionCrop.IsChecked == true)
+            {
+                outputWidthPx = Math.Min(outputWidthPx, sourceWidthPx);
+                outputHeightPx = Math.Min(outputHeightPx, sourceHeightPx);
+            }
+
+            // Prevent negative margins
+            marginLeftPx = Math.Max(0, marginLeftPx);
+            marginTopPx = Math.Max(0, marginTopPx);
+
+            // Prevent crop rectangle from leaving the image
+            if (ActionCrop.IsChecked == true)
+            {
+                if (marginLeftPx + outputWidthPx > sourceWidthPx)
+                    outputWidthPx = sourceWidthPx - marginLeftPx;
+
+                if (marginTopPx + outputHeightPx > sourceHeightPx)
+                    outputHeightPx = sourceHeightPx - marginTopPx;
+
+                // If the width/height changed first,
+                // make sure the margins are still valid.
+                marginLeftPx = Math.Min(marginLeftPx, sourceWidthPx - outputWidthPx);
+                marginTopPx = Math.Min(marginTopPx, sourceHeightPx - outputHeightPx);
+
+                marginLeftPx = Math.Max(0, marginLeftPx);
+                marginTopPx = Math.Max(0, marginTopPx);
+            }
+        }
+        
         #endregion
 
         #region Path Validation
@@ -1875,6 +1991,19 @@ namespace BulkCropAndResizeTool
         private double _currentRotation = 0;
         private double _previousRotation = 0;
         private string? _currentImagePath = null;
+        private const double Dpi = 96.0; // Standard screen DPI
+        private const double MmPerInch = 25.4;
+        private int sourceWidthPx = 1000;
+        private int sourceHeightPx = 2000;
+        private int outputWidthPx = 500;
+        private int outputHeightPx = 1000;
+        private int marginLeftPx = 0;
+        private int marginTopPx = 0;
+        private bool _isManipulating = false;
+        private Point _startMousePos;
+        private int _startMarginLeftPx, _startMarginTopPx, _startWidthPx, _startHeightPx;
+        private bool _updatingUI = false;
+
 
         #endregion
 
@@ -1888,14 +2017,7 @@ namespace BulkCropAndResizeTool
 
         #endregion
 
-
-        private void NoOverwrite_CheckedChanged(object sender, RoutedEventArgs e)
-        {
-            UpdateFilenameAvailability();
-        }
-
-        
-        
+        #region Source/Destination Browsing
         private void SrcBrowse_Click(object sender, RoutedEventArgs e)
         {
             var dialog = new FileFolderDialog
@@ -1989,51 +2111,8 @@ namespace BulkCropAndResizeTool
         }
         
         #pragma warning disable SYSLIB1045
-        private static readonly System.Text.RegularExpressions.Regex _reservedNameRegex =
-            new(@"^(COM|LPT)[1-9]$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+        private static readonly System.Text.RegularExpressions.Regex _reservedNameRegex = new(@"^(COM|LPT)[1-9]$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
         #pragma warning restore SYSLIB1045
-
-        
-        
-        private string? userCustomText = null; // Store user custom text
-
-        
-        private void LayoutPositioning()
-        {
-            bool isPrefix = ModePrefix.IsChecked == true;
-
-            if (isPrefix)
-            {
-                NameStackPanel.Children.Clear();
-                NameStackPanel.Children.Add(PreSufBox);
-                NameStackPanel.Children.Add(NameSource);
-                NameStackPanel.Children.Add(NameExtension);
-            }
-            else
-            {
-                NameStackPanel.Children.Clear();
-                NameStackPanel.Children.Add(NameSource);
-                NameStackPanel.Children.Add(PreSufBox);
-                NameStackPanel.Children.Add(NameExtension);
-            }
-        }
-
-        private const double Dpi = 96.0;               // Standard screen DPI
-        private const double MmPerInch = 25.4;
-
-        private int sourceWidthPx = 1000;
-        private int sourceHeightPx = 2000;
-        private int outputWidthPx = 500;
-        private int outputHeightPx = 1000;
-        private int marginLeftPx = 0;
-        private int marginTopPx = 0;
-
-        private bool _isManipulating = false;
-        private Point _startMousePos;
-        private int _startMarginLeftPx, _startMarginTopPx, _startWidthPx, _startHeightPx;
-
-
-        private bool _updatingUI = false;
 
         private void LoadPath(string path)
         {
@@ -2079,106 +2158,8 @@ namespace BulkCropAndResizeTool
                 ActionBtn.IsEnabled = false;
             }
         }
-                
-        
-        
-        private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
-        {
-            // Only handle when Crop mode is active and overlay is visible
-            if (ActionCrop.IsChecked != true || CropOverlay.Visibility != Visibility.Visible)
-                return;
 
-            // Ignore if the user is currently dragging with the mouse
-            if (_isManipulating)
-                return;
-
-            // Determine step size
-            int step = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? 10 : 1;
-
-            int dx = 0, dy = 0;
-
-            switch (e.Key)
-            {
-                case Key.Left: dx = -step; break;
-                case Key.Right: dx = step; break;
-                case Key.Up: dy = -step; break;
-                case Key.Down: dy = step; break;
-                default: return; // not an arrow key
-            }
-
-            MoveOverlay(dx, dy);
-            e.Handled = true; // prevent other actions
-        }
-
-        private void MoveOverlay(int dx, int dy)
-        {
-            // Calculate new margins
-            int newLeft = marginLeftPx + dx;
-            int newTop = marginTopPx + dy;
-
-            // Clamp to keep the overlay inside the image
-            newLeft = Clamp(newLeft, 0, sourceWidthPx - outputWidthPx);
-            newTop = Clamp(newTop, 0, sourceHeightPx - outputHeightPx);
-
-            // Only update if changed
-            if (newLeft != marginLeftPx || newTop != marginTopPx)
-            {
-                marginLeftPx = newLeft;
-                marginTopPx = newTop;
-                RefreshCropUI(); // updates UI and overlay position
-            }
-        }
-        
-        private const double EdgeTolerance = 20.0;
-
-        private void ClampCropRectangle()
-        {
-            // Prevent invalid sizes
-            outputWidthPx = Math.Max(1, outputWidthPx);
-            outputHeightPx = Math.Max(1, outputHeightPx);
-
-            // Crop mode cannot exceed source image
-            if (ActionCrop.IsChecked == true)
-            {
-                outputWidthPx = Math.Min(outputWidthPx, sourceWidthPx);
-                outputHeightPx = Math.Min(outputHeightPx, sourceHeightPx);
-            }
-
-            // Prevent negative margins
-            marginLeftPx = Math.Max(0, marginLeftPx);
-            marginTopPx = Math.Max(0, marginTopPx);
-
-            // Prevent crop rectangle from leaving the image
-            if (ActionCrop.IsChecked == true)
-            {
-                if (marginLeftPx + outputWidthPx > sourceWidthPx)
-                    outputWidthPx = sourceWidthPx - marginLeftPx;
-
-                if (marginTopPx + outputHeightPx > sourceHeightPx)
-                    outputHeightPx = sourceHeightPx - marginTopPx;
-
-                // If the width/height changed first,
-                // make sure the margins are still valid.
-                marginLeftPx = Math.Min(marginLeftPx, sourceWidthPx - outputWidthPx);
-                marginTopPx = Math.Min(marginTopPx, sourceHeightPx - outputHeightPx);
-
-                marginLeftPx = Math.Max(0, marginLeftPx);
-                marginTopPx = Math.Max(0, marginTopPx);
-            }
-        }
-        
-        
-        private static BitmapSource? ResizeImage(BitmapSource source, int targetWidth, int targetHeight)
-        {
-            if (source == null) return null;
-            if (targetWidth <= 0 || targetHeight <= 0) return source;
-            double scaleX = targetWidth / (double)source.PixelWidth;
-            double scaleY = targetHeight / (double)source.PixelHeight;
-            var transform = new ScaleTransform(scaleX, scaleY);
-            var resized = new TransformedBitmap(source, transform);
-            resized.Freeze();
-            return resized;
-        }
+        #endregion
 
         }
 
