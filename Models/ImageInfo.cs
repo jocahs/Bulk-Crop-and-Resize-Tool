@@ -1,4 +1,0 @@
-namespace BulkCropAndResizeTool.Models
-{
-    
-}

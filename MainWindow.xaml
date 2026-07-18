@@ -111,7 +111,7 @@
                      Height="35" 
                      BorderBrush="DarkOrange" 
                      BorderThickness="2"/>
-                <Button Grid.Column="1" Style="{StaticResource ActionButtonStyle}" Content="Browse" Click="SrcBrowse_Click" />
+                <Button x:Name="SrcBrowse" Grid.Column="1" Style="{StaticResource ActionButtonStyle}" Content="Browse"/>
             </Grid>           
             <Label Content="Output folder:" FontWeight="Bold" Margin="0,0,0,0" HorizontalAlignment="Left"/>
             
@@ -134,7 +134,7 @@
                   LostFocus="DstBox_LostFocus"
                   BorderBrush="MediumPurple" 
                   BorderThickness="2"/>
-                <Button Grid.Column="1"  Style="{StaticResource ActionButtonStyle}" Content="Browse" Click="DstBrowse_Click" />
+                <Button Grid.Column="1"  x:Name="DstBrowse"  Style="{StaticResource ActionButtonStyle}" Content="Browse"/>
             </Grid>
 
             <DockPanel VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,5,0,-5">
@@ -375,7 +375,7 @@
                             <Button x:Name="ZoomInBtn" Content="🔍➕" Style="{StaticResource ToolbarButtonStyle}" Cursor="Hand"/>
                             <Button x:Name="ZoomOutBtn" Content="🔍➖" Style="{StaticResource ToolbarButtonStyle}" Cursor="Hand"/>
                             <Button  x:Name="FitBtn" Content="⛶ Fit to Window" Style="{StaticResource ToolbarButtonStyle}" Cursor="Hand"/>
-                            <Button x:Name="ActualSizebtn" Content="Actual Size 1:1" Style="{StaticResource ToolbarButtonStyle}" Cursor="Hand"/>
+                            <Button x:Name="ActualSizeBtn" Content="Actual Size 1:1" Style="{StaticResource ToolbarButtonStyle}" Cursor="Hand"/>
                             <Button Grid.Column="5" x:Name="PanModeBtn" Content="✋ Pan" Style="{StaticResource ToolbarButtonStyle}" Cursor="Hand"/>
                         </StackPanel>
                     </GroupBox>

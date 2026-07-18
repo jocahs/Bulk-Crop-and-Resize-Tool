@@ -24,15 +24,7 @@ public static class AppConstants
 
     #region Image Types
 
-    public static readonly string[] ImageExtensions =
-    {
-        "*.jpg",
-        "*.jpeg",
-        "*.png",
-        "*.bmp",
-        "*.gif",
-        "*.tiff"
-    };
+    public static readonly string[] ImageExtensions = [ "*.jpg", "*.jpeg", "*.png", "*.bmp", "*.gif", "*.tiff" ];
 
         #endregion
     }
