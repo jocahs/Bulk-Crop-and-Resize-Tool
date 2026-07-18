@@ -16,7 +16,7 @@ using BulkCropAndResizeTool.Dialogs;
 using BulkCropAndResizeTool.Helpers;
 using BulkCropAndResizeTool.Models;
 //using BulkCropAndResizeTool.Resources;
-//using BulkCropAndResizeTool.Services;
+using BulkCropAndResizeTool.Services;
 
 namespace BulkCropAndResizeTool
 {
@@ -26,17 +26,25 @@ namespace BulkCropAndResizeTool
         public MainWindow()
         {
             InitializeComponent();
-            // Set initial states
+            InitializeApplication();
+            RegisterEvents();
+        }
 
+        private void InitializeApplication()
+        {
+            CropOverlay.Visibility = Visibility.Hidden;
+            RightPanelGrid.IsEnabled = false;
+            UnitPer.IsEnabled = false;
+            
             RefreshCropUI();
             UpdateUnitAvailability();
             UpdateFilenameAvailability();
             UpdateFilenameLayout();
             UpdateSourceFilename();
-            UpdateAllTextBoxes();
-
-
-            // Attach event handlers
+            UpdateAllTextBoxes();           
+        }
+        private void RegisterEvents()
+        {
             ActionCrop.Checked += Action_CheckedChanged;
             ActionResize.Checked += Action_CheckedChanged;
             ActualSizebtn.Click += ActualSizeBtn_Click;
@@ -45,11 +53,11 @@ namespace BulkCropAndResizeTool
             ActionBtn.Click += ActionBtn_Click;
             CropOverlay.MouseMove += CropOverlay_MouseMove;
             CropOverlay.MouseUp += CropOverlay_MouseUp;
-            CropOverlay.Visibility = Visibility.Hidden;
             FitBtn.Click += FitBtn_Click;
             HeightBox.LostFocus += HeightBox_LostFocus;
             HeightBox.ValueChanged += HeightBox_ValueChanged;
             HScrollBar.ValueChanged += HScrollBar_ValueChanged;
+            Loaded += MainWindow_Loaded; 
             MarginLeftBox.ValueChanged += MarginLeftBox_ValueChanged;
             MargintopBox.ValueChanged += MargintopBox_ValueChanged;
             ModePrefix.Checked += ModePrefix_Checked;
@@ -57,7 +65,7 @@ namespace BulkCropAndResizeTool
             OverwriteChk.Checked += NoOverwrite_CheckedChanged;
             OverwriteChk.Unchecked += NoOverwrite_CheckedChanged;
             PanModeBtn.Click += PanModeBtn_Click;
-            PreSufBox.LostFocus += PreSufBox_LostFocus; 
+            PreSufBox.LostFocus += PreSufBox_LostFocus;
             PreviewBorder.MouseWheel += PreviewArea_MouseWheel;
             PreviewCanvas.MouseLeave += (s, e) => Cursor = Cursors.Arrow;
             PreviewCanvas.PreviewMouseDown += PreviewCanvas_PreviewMouseDown;
@@ -68,14 +76,12 @@ namespace BulkCropAndResizeTool
             PreviewImage.SizeChanged += (s, e) => UpdateCropOverlay();
             ResetAll.Click += ResetAll_Click;
             ResetBtn.Click += ResetBtn_Click;
-            RightPanelGrid.IsEnabled = false; 
             Rotate180.Click += (s, e) => { _currentRotation += 180; UpdateDisplayedImage(); };
             RotateMinus90.Click += (s, e) => { _currentRotation -= 90; UpdateDisplayedImage(); };
             RotateMore90.Click += (s, e) => { _currentRotation += 90; UpdateDisplayedImage(); };
             this.PreviewKeyDown += Window_PreviewKeyDown;
             UnitMM.Checked += Unit_CheckedChanged;
             UnitPer.Checked += Unit_CheckedChanged;
-            UnitPer.IsEnabled = false;
             UnitPixels.Checked += Unit_CheckedChanged;
             VScrollBar.ValueChanged += VScrollBar_ValueChanged;
             WidthBox.LostFocus += WidthBox_LostFocus;
@@ -83,9 +89,24 @@ namespace BulkCropAndResizeTool
             ZoomInBtn.Click += ZoomInBtn_Click;
             ZoomOutBtn.Click += ZoomOutBtn_Click;
             PreviewCanvas.MouseMove += PreviewCanvas_MouseMove;
-            Loaded += (_, _) => Width = MinWidth;
         }
 
+        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        {
+            Width = MinWidth;
+        }
+
+
+        #region Image State
+
+        private BitmapSource? _originalImage = null;
+        private double _currentRotation = 0;
+        private double _previousRotation = 0;
+        private string? _currentImagePath = null;
+
+        #endregion
+
+        #region Zoom & Pan
         private enum ZoomMode { Fit, Actual, Custom }
         private ZoomMode _zoomMode = ZoomMode.Fit;
         private double _customZoom = 1.0;
@@ -97,6 +118,21 @@ namespace BulkCropAndResizeTool
         private bool _isPanning = false;
         private Point _panStartMouse;
         private double _panStartX, _panStartY;
+
+        #endregion
+
+        #region Crop State
+        
+        private string _resizeMode = "";
+
+        #endregion
+
+        #region File State
+
+        private string _lastValidSourcePath = AppConstants.DefaultSrcBoxText;
+        private string _lastValidOutputPath = AppConstants.DefaultDstBoxText;
+
+        #endregion
 
         private void UpdatePreviewTransform()
         {
@@ -221,8 +257,6 @@ namespace BulkCropAndResizeTool
 
             e.Handled = true;
         }
-        private BitmapSource? _originalImage = null;   // the raw image (no rotation)
-        private double _currentRotation = 0;
         private void Action_CheckedChanged(object sender, RoutedEventArgs e)
         {
             if (ActionResize.IsChecked == false)
@@ -638,8 +672,7 @@ namespace BulkCropAndResizeTool
 
         private string? userCustomText = null; // Store user custom text
 
-        private string? _currentImagePath = null;
-
+        
         private void UpdateFilenameLayout()
         {
             // Update the source filename first
@@ -699,7 +732,6 @@ namespace BulkCropAndResizeTool
         private int marginTopPx = 0;
 
         private bool _isManipulating = false;
-        private string _resizeMode = "";
         private Point _startMousePos;
         private int _startMarginLeftPx, _startMarginTopPx, _startWidthPx, _startHeightPx;
 
@@ -813,7 +845,7 @@ namespace BulkCropAndResizeTool
                 if (targetH < 1) targetH = 1;
 
                 // Find the best integer pair preserving the ratio
-                var (w, h) = FindBestAspectRatioPair(targetW, targetH, sourceWidthPx, sourceHeightPx);
+                var (w, h) = AspectRatioHelper.FindBestAspectRatioPair(targetW, targetH, sourceWidthPx, sourceHeightPx);
 
                 // Apply Crop limits
                 if (ActionCrop.IsChecked == true)
@@ -858,7 +890,7 @@ namespace BulkCropAndResizeTool
                 int targetW = (int)Math.Round((double)targetH * sourceWidthPx / sourceHeightPx);
                 if (targetW < 1) targetW = 1;
 
-                var (w, h) = FindBestAspectRatioPair(targetW, targetH, sourceWidthPx, sourceHeightPx);
+                var (w, h) = AspectRatioHelper.FindBestAspectRatioPair(targetW, targetH, sourceWidthPx, sourceHeightPx);
 
                 if (ActionCrop.IsChecked == true)
                 {
@@ -917,7 +949,7 @@ namespace BulkCropAndResizeTool
 
             int targetW = outputWidthPx;
             int targetH = outputHeightPx;
-            var (w, h) = FindBestAspectRatioPair(targetW, targetH, sourceWidthPx, sourceHeightPx);
+            var (w, h) = AspectRatioHelper.FindBestAspectRatioPair(targetW, targetH, sourceWidthPx, sourceHeightPx);
 
             // Apply Crop limits if needed
             if (ActionCrop.IsChecked == true)
@@ -1183,7 +1215,7 @@ namespace BulkCropAndResizeTool
         {
             try
             {
-                var normalizedImage = LoadImageFromFile(filePath) ?? throw new Exception("Failed to load image.");
+                var normalizedImage = ImageProcessor.LoadImageFromFile(filePath) ?? throw new Exception("Failed to load image.");
                 _originalImage = normalizedImage;
                 _currentRotation = 0;
                 _previousRotation = 0;
@@ -1268,34 +1300,7 @@ namespace BulkCropAndResizeTool
             }
             PreviewImage.Source = display;
         }
-        private static (int w, int h) FindBestAspectRatioPair(int targetW, int targetH, int sourceW, int sourceH, int searchRadius = 5)
-        {
-            double bestCost = double.MaxValue;
-            int bestW = Math.Max(1, targetW);
-            int bestH = Math.Max(1, targetH);
-
-            int startW = Math.Max(1, targetW - searchRadius);
-            int endW = targetW + searchRadius;
-
-            for (int w = startW; w <= endW; w++)
-            {
-                int h = (int)Math.Round((double)w * sourceH / sourceW);
-                if (h < 1) h = 1;
-
-                // Cost: sum of absolute differences from targets
-                double cost = Math.Abs(w - targetW) + Math.Abs(h - targetH);
-                if (cost < bestCost)
-                {
-                    bestCost = cost;
-                    bestW = w;
-                    bestH = h;
-                }
-            }
-
-            // Clamp to source if Crop mode (optional, but will be handled later)
-            return (bestW, bestH);
-        }
-
+        
         private void PreviewCanvas_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
             if (_isPanMode) return;
@@ -1613,7 +1618,6 @@ namespace BulkCropAndResizeTool
             UpdateMaxValues();
             UpdateAllTextBoxes();
         }
-        private double _previousRotation = 0;
         private void TransformCropRectangle(double deltaAngle, int oldW, int oldH)
         {
             // deltaAngle should be one of: 90, -90, 180 (or 0)
@@ -1972,115 +1976,6 @@ namespace BulkCropAndResizeTool
                 AppendLog($"Processing failed: {ex.Message}\n");
             }
         }
-        private static BitmapSource? LoadImageFromFile(string filePath)
-        {
-            try
-            {
-                int orientation = 1;
-
-                using (var fs = new FileStream(
-                           filePath,
-                           FileMode.Open,
-                           FileAccess.Read,
-                           FileShare.ReadWrite))
-                using (var img = System.Drawing.Image.FromStream(fs, false, false))
-                {
-                    var prop = img.PropertyItems.FirstOrDefault(p => p.Id == 0x0112);
-                    if (prop != null && prop.Value?.Length >= 2)
-                        orientation = BitConverter.ToUInt16(prop.Value, 0);
-                }
-
-                BitmapImage bitmap;
-
-                using (var stream = new FileStream(
-                           filePath,
-                           FileMode.Open,
-                           FileAccess.Read,
-                           FileShare.ReadWrite))
-                {
-                    bitmap = new BitmapImage();
-                    bitmap.BeginInit();
-                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                    bitmap.StreamSource = stream;
-                    bitmap.EndInit();
-                    bitmap.Freeze();
-                }
-
-                BitmapSource source = bitmap;
-
-                double w = source.PixelWidth;
-                double h = source.PixelHeight;
-
-                // 3. Apply EXIF transformation
-                var transform = new TransformGroup();
-                switch (orientation)
-                {
-                    case 2: // Mirror horizontally
-                        transform.Children.Add(new ScaleTransform(-1, 1));
-                        transform.Children.Add(new TranslateTransform(w, 0));
-                        break;
-                    case 3: // Rotate 180°
-                        transform.Children.Add(new RotateTransform(180));
-                        break;
-                    case 4: // Mirror vertically
-                        transform.Children.Add(new ScaleTransform(1, -1));
-                        transform.Children.Add(new TranslateTransform(0, h));
-                        break;
-                    case 5: // Rotate 90° CW + Mirror horizontally
-                        transform.Children.Add(new RotateTransform(90));
-                        transform.Children.Add(new ScaleTransform(-1, 1));
-                        transform.Children.Add(new TranslateTransform(h, 0));
-                        break;
-                    case 6: // Rotate 90° CW
-                        transform.Children.Add(new RotateTransform(90));
-                        break;
-                    case 7: // Rotate 90° CW + Mirror vertically
-                        transform.Children.Add(new RotateTransform(90));
-                        transform.Children.Add(new ScaleTransform(1, -1));
-                        transform.Children.Add(new TranslateTransform(0, w));
-                        break;
-                    case 8: // Rotate 270° CW
-                        transform.Children.Add(new RotateTransform(270));
-                        break;
-                    default:
-                        break;
-                }
-
-                if (transform.Children.Count > 0)
-                {
-                    source = new TransformedBitmap(source, transform);
-                    source.Freeze();
-                }
-
-                return source;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-        private static CroppedBitmap CropSingleImage(BitmapSource source, double rotationAngle, int cropX, int cropY, int cropW, int cropH)
-        {
-            BitmapSource rotated = source;
-            if (Math.Abs(rotationAngle % 360) > 0.001)
-            {
-                var transform = new RotateTransform(rotationAngle);
-                rotated = new TransformedBitmap(source, transform);
-                rotated.Freeze();
-            }
-
-            int rw = rotated.PixelWidth;
-            int rh = rotated.PixelHeight;
-            cropX = Math.Max(0, Math.Min(cropX, rw - 1));
-            cropY = Math.Max(0, Math.Min(cropY, rh - 1));
-            cropW = Math.Max(1, Math.Min(cropW, rw - cropX));
-            cropH = Math.Max(1, Math.Min(cropH, rh - cropY));
-
-            var cropRect = new Int32Rect(cropX, cropY, cropW, cropH);
-            var cropped = new CroppedBitmap(rotated, cropRect);
-            cropped.Freeze();
-            return cropped;
-        }
         private async System.Threading.Tasks.Task ProcessBatchAsync(string folderPath, string outputFolder, List<string> files, bool isResize, string unit, int previewW, int previewH)
         {
             ArgumentNullException.ThrowIfNull(folderPath);
@@ -2104,7 +1999,7 @@ namespace BulkCropAndResizeTool
 
             foreach (string filePath in files)
             {
-                var image = LoadImageFromFile(filePath);
+                var image = ImageProcessor.LoadImageFromFile(filePath);
                 if (image == null)
                 {
                     AppendLog($"Failed to load: {System.IO.Path.GetFileName(filePath)}\n");
@@ -2167,7 +2062,7 @@ namespace BulkCropAndResizeTool
                     int cropH = outputHeightPx;
 
                     // The CropSingleImage method applies rotation and clamps
-                    processedImage = CropSingleImage(image, angle, cropX, cropY, cropW, cropH);
+                    processedImage = ImageProcessor.CropSingleImage(image, angle, cropX, cropY, cropW, cropH);
                 }
 
                 // --- Filename generation ---
@@ -2321,9 +2216,7 @@ namespace BulkCropAndResizeTool
             AppendLog("--- End Debug ---\n");
         }
 
-        private string _lastValidSourcePath = AppConstants.DefaultSrcBoxText;
-        private string _lastValidOutputPath = AppConstants.DefaultDstBoxText;
-
+        
         private static BitmapSource? ResizeImage(BitmapSource source, int targetWidth, int targetHeight)
         {
             if (source == null) return null;
