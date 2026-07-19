@@ -1,4 +1,5 @@
-﻿using BulkCropAndResizeTool.Dialogs;
+﻿using BulkCropAndResizeTool.Controls;
+using BulkCropAndResizeTool.Dialogs;
 using BulkCropAndResizeTool.Helpers;
 using BulkCropAndResizeTool.Models;
 using BulkCropAndResizeTool.Services;
@@ -8,6 +9,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -25,19 +27,21 @@ namespace BulkCropAndResizeTool
 
         private readonly ImageState _imageState = new();
         private readonly ViewportState _viewportState = new();
-        private readonly FilenameOptions _filenameOptions = new();
         private readonly ImageProcessingService _imageService;
         private readonly FileService _fileService;
         private readonly LoggingService _logger;
+        private readonly IFilenameService _filenameService;
+        private readonly BatchProcessor _batchProcessor;
+        private readonly CropOverlayController _cropController;
+        private readonly ViewportController _viewportController;
+
         private bool _isUpdatingUI = false;
         private string _lastValidSourcePath = AppConstants.DefaultSrcBoxText;
         private string _lastValidOutputPath = AppConstants.DefaultDstBoxText;
         private string? _userCustomText = null;
-        private bool _isManipulating = false;
-        private string _resizeMode = string.Empty;
-        private Point _startMousePos;
-        private int _startMarginLeftPx, _startMarginTopPx, _startWidthPx, _startHeightPx;
-        
+        private CancellationTokenSource? _cancellationTokenSource;
+        private OverwriteAction? _batchAction = null;
+
         #endregion
 
         #region Constructor
@@ -47,6 +51,12 @@ namespace BulkCropAndResizeTool
             _imageService = new ImageProcessingService();
             _fileService = new FileService();
             _logger = new LoggingService(LogTextBox, AppendLog);
+            _filenameService = new FilenameService();
+            _batchProcessor = new BatchProcessor(_imageService, _logger);
+            _cropController = new CropOverlayController(CropOverlay, _imageState, _viewportState);
+            _viewportController = new ViewportController(
+                PreviewCanvas, PreviewImage, CropOverlay, HScrollBar, VScrollBar, ZoomLabel, PanModeBtn,
+                _imageState, _viewportState, UpdateCropOverlay);
 
             InitializeApplication();
         }
@@ -121,6 +131,7 @@ namespace BulkCropAndResizeTool
             ActionBtn.Click += ActionBtn_Click;
             ResetBtn.Click += ResetBtn_Click;
             ResetAll.Click += ResetAll_Click;
+            CancelBtn.Click += CancelBtn_Click;
 
             // Rotation
             Rotate180.Click += (s, e) => RotateImage(180);
@@ -150,7 +161,7 @@ namespace BulkCropAndResizeTool
         {
             try
             {
-                var image = ImageProcessingService.LoadImageFromFile(filePath) ?? throw new Exception("Failed to load image.");
+                var image = _imageService.LoadImageFromFile(filePath) ?? throw new Exception("Failed to load image.");
                 _imageState.OriginalImage = image;
                 _imageState.CurrentRotation = 0;
                 _imageState.PreviousRotation = 0;
@@ -225,10 +236,10 @@ namespace BulkCropAndResizeTool
 
             PreviewImage.Width = w;
             PreviewImage.Height = h;
-            UpdatePreviewTransform();
+            _viewportController.UpdateTransform();
 
             // Apply rotation to image
-            var display = ImageProcessingService.RotateImage(_imageState.OriginalImage, _imageState.CurrentRotation);
+            var display = _imageService.RotateImage(_imageState.OriginalImage, _imageState.CurrentRotation);
             PreviewImage.Source = display ?? _imageState.OriginalImage;
         }
 
@@ -243,116 +254,6 @@ namespace BulkCropAndResizeTool
         {
             _imageState.CurrentRotation += degrees;
             UpdateDisplayedImage();
-        }
-        #endregion
-
-        #region Preview Transform
-        private void UpdatePreviewTransform()
-        {
-            if (_imageState.OriginalImage == null || _imageState.SourceWidthPx <= 0)
-            {
-                PreviewCanvas.RenderTransform = null;
-                _viewportState.CurrentScale = 1.0;
-                UpdateZoomLabel();
-                ResetScrollBars();
-                return;
-            }
-
-            double canvasW = PreviewCanvas.ActualWidth;
-            double canvasH = PreviewCanvas.ActualHeight;
-            double scale = CalculateScale(canvasW, canvasH);
-
-            _viewportState.CurrentScale = Math.Clamp(scale, 0.01, 100);
-
-            double scaledW = _imageState.SourceWidthPx * _viewportState.CurrentScale;
-            double scaledH = _imageState.SourceHeightPx * _viewportState.CurrentScale;
-
-            _viewportState.MinPanX = scaledW > canvasW ? (canvasW - scaledW) : 0;
-            _viewportState.MinPanY = scaledH > canvasH ? (canvasH - scaledH) : 0;
-            _viewportState.MaxPanX = 0;
-            _viewportState.MaxPanY = 0;
-
-            _viewportState.PanX = Math.Clamp(_viewportState.PanX, _viewportState.MinPanX, _viewportState.MaxPanX);
-            _viewportState.PanY = Math.Clamp(_viewportState.PanY, _viewportState.MinPanY, _viewportState.MaxPanY);
-
-            UpdateScrollBars(canvasW, canvasH);
-
-            var group = new TransformGroup();
-            group.Children.Add(new ScaleTransform(scale, scale));
-            group.Children.Add(new TranslateTransform(_viewportState.PanX, _viewportState.PanY));
-            PreviewCanvas.RenderTransform = group;
-
-            UpdateZoomLabel();
-            UpdateCropOverlay();
-        }
-
-        private double CalculateScale(double canvasW, double canvasH)
-        {
-            return _viewportState.ZoomMode switch
-            {
-                ZoomMode.Fit => Math.Min(canvasW / _imageState.SourceWidthPx, canvasH / _imageState.SourceHeightPx),
-                ZoomMode.Actual => 1.0,
-                ZoomMode.Custom => _viewportState.CustomZoom,
-                _ => 1.0
-            };
-        }
-
-        private void UpdateScrollBars(double canvasW, double canvasH)
-        {
-            _isUpdatingUI = true;
-            try
-            {
-                double hRange = -_viewportState.MinPanX;
-                HScrollBar.Minimum = 0;
-                HScrollBar.Maximum = hRange;
-                HScrollBar.ViewportSize = canvasW;
-                HScrollBar.Value = Math.Clamp(-_viewportState.PanX, 0, hRange);
-
-                double vRange = -_viewportState.MinPanY;
-                VScrollBar.Minimum = 0;
-                VScrollBar.Maximum = vRange;
-                VScrollBar.ViewportSize = canvasH;
-                VScrollBar.Value = Math.Clamp(-_viewportState.PanY, 0, vRange);
-            }
-            finally
-            {
-                _isUpdatingUI = false;
-            }
-        }
-
-        private void ResetScrollBars()
-        {
-            _isUpdatingUI = true;
-            try
-            {
-                HScrollBar.Minimum = 0;
-                HScrollBar.Maximum = 0;
-                HScrollBar.Value = 0;
-                VScrollBar.Minimum = 0;
-                VScrollBar.Maximum = 0;
-                VScrollBar.Value = 0;
-            }
-            finally
-            {
-                _isUpdatingUI = false;
-            }
-        }
-
-        private void UpdateZoomLabel()
-        {
-            if (_imageState.OriginalImage == null)
-            {
-                ZoomLabel.Content = "No image";
-                return;
-            }
-
-            ZoomLabel.Content = _viewportState.ZoomMode switch
-            {
-                ZoomMode.Fit => "Fit",
-                ZoomMode.Actual => "1:1",
-                ZoomMode.Custom => $"{_viewportState.CurrentScale * 100:F0}%",
-                _ => ""
-            };
         }
         #endregion
 
@@ -655,110 +556,57 @@ namespace BulkCropAndResizeTool
                 return;
             }
 
+            // Check if source is a folder or file
             if (Directory.Exists(SrcBox.Text))
             {
                 await ProcessBatchAsync(SrcBox.Text, outputFolder);
                 return;
             }
 
-            await ProcessSingleImageAsync(outputFolder);
-        }
-
-        private async Task ProcessBatchAsync(string folderPath, string outputFolder)
-        {
-            var files = _fileService.GetImageFiles(folderPath);
-            if (files.Count == 0)
+            // Check if a single file is selected
+            if (File.Exists(SrcBox.Text))
             {
-                _logger.Log("No image files found in the source folder.");
+                // Load the image if not already loaded
+                if (_imageState.OriginalImage == null || _imageState.CurrentImagePath != SrcBox.Text)
+                {
+                    LoadPreviewImage(SrcBox.Text);
+                }
+
+                // Process the single image
+                await ProcessSingleImageAsync(outputFolder);
                 return;
             }
 
-            _logger.Log($"Starting batch processing for {files.Count} images...");
-            bool isResize = ActionResize.IsChecked == true;
-            string unit = GetCurrentUnit();
-
-            int total = files.Count;
-            int processed = 0;
-            Progress.Maximum = total;
-            Progress.Value = 0;
-            CancelBtn.IsEnabled = true;
-
-            double angle = _imageState.CurrentRotation % 360;
-            OverwriteAction? batchAction = null;
-
-            double? percentW = null, percentH = null;
-            if (unit == "%")
-            {
-                percentW = _imageState.OutputWidthPx * 100.0 / _imageState.SourceWidthPx;
-                percentH = _imageState.OutputHeightPx * 100.0 / _imageState.SourceHeightPx;
-            }
-
-            foreach (string filePath in files)
-            {
-                var image = ImageProcessingService.LoadImageFromFile(filePath);
-                if (image == null)
-                {
-                    _logger.Log($"Failed to load: {System.IO.Path.GetFileName(filePath)}");
-                    processed++;
-                    Progress.Value = processed;
-                    continue;
-                }
-
-                var processedImage = ImageProcessingService.ProcessImage( image, isResize, unit, angle, _imageState.OutputWidthPx, _imageState.OutputHeightPx, _imageState.MarginLeftPx, _imageState.MarginTopPx, percentW, percentH);
-
-                if (processedImage == null)
-                {
-                    _logger.Log($"Failed to process: {System.IO.Path.GetFileName(filePath)}");
-                    processed++;
-                    Progress.Value = processed;
-                    continue;
-                }
-                var (saveFileName, savePath, ext) = FilenameGenerator.GetOutputFileInfo(
-                    filePath, outputFolder, PreSufBox.Text ?? "",
-                    OverwriteChk.IsChecked == true,
-                    ModePrefix.IsChecked == true);
-
-                if (ShouldSkipFile(saveFileName, savePath, ref batchAction))
-                {
-                    _logger.Log($"Skipped: {saveFileName}");
-                    processed++;
-                    Progress.Value = processed;
-                    continue;
-                }
-
-                try
-                {
-                    ImageProcessingService.SaveImage(processedImage, savePath, ext);
-                    _logger.Log($"Saved: {saveFileName}");
-                }
-                catch (Exception ex)
-                {
-                    _logger.Log($"Error saving {saveFileName}: {ex.Message}");
-                }
-
-                processed++;
-                Progress.Value = processed;
-                await Task.Delay(1);
-            }
-
-            Progress.Value = total;
-            CancelBtn.IsEnabled = false;
-            _logger.Log($"Batch processing completed. {processed} files processed.");
-
-            if (OpenAfterChk.IsChecked == true)
-                Process.Start("explorer.exe", outputFolder);
+            _logger.Log("No valid source selected. Please select an image file or folder.");
         }
-
         private async Task ProcessSingleImageAsync(string outputFolder)
         {
+            if (_imageState.OriginalImage == null)
+            {
+                _logger.Log("No image loaded.");
+                return;
+            }
+
             bool isResize = ActionResize.IsChecked == true;
             string unit = GetCurrentUnit();
 
-            var processedImage = ImageProcessingService.ProcessImage(
-                _imageState.OriginalImage!, isResize, unit, _imageState.CurrentRotation,
-                _imageState.OutputWidthPx, _imageState.OutputHeightPx,
-                _imageState.MarginLeftPx, _imageState.MarginTopPx,
-                _imageState.SourceWidthPx, _imageState.SourceHeightPx);
+            var processedImage = _imageService.ProcessImage(
+                _imageState.OriginalImage!,
+                isResize,
+                unit,
+                _imageState.CurrentRotation,
+                _imageState.OutputWidthPx,
+                _imageState.OutputHeightPx,
+                _imageState.MarginLeftPx,
+                _imageState.MarginTopPx,
+                _imageState.SourceWidthPx,
+                _imageState.SourceHeightPx);
+
+            if (processedImage == null)
+            {
+                _logger.Log("Failed to process image.");
+                return;
+            }
 
             string originalName = string.IsNullOrEmpty(_imageState.CurrentImagePath) ? "image" : System.IO.Path.GetFileName(_imageState.CurrentImagePath);
             string ext = System.IO.Path.GetExtension(originalName);
@@ -800,7 +648,7 @@ namespace BulkCropAndResizeTool
 
             try
             {
-                ImageProcessingService.SaveImage(processedImage!, savePath, ext);
+                _imageService.SaveImage(processedImage, savePath, ext);
                 _logger.Log($"Image saved to: {savePath}");
 
                 if (OpenAfterChk.IsChecked == true)
@@ -811,13 +659,12 @@ namespace BulkCropAndResizeTool
                 _logger.Log($"Processing failed: {ex.Message}");
             }
         }
-
-        private bool ShouldSkipFile(string saveFileName, string savePath, ref OverwriteAction? batchAction)
+        private bool ShouldSkipFile(string saveFileName, string savePath)
         {
             if (OverwriteChk.IsChecked == false && File.Exists(savePath))
             {
-                if (batchAction.HasValue)
-                    return batchAction.Value == OverwriteAction.SkipAll;
+                if (_batchAction.HasValue)
+                    return _batchAction.Value == OverwriteAction.SkipAll;
 
                 var dialog = new OverwritePromptDialog { Owner = this };
                 bool? result = dialog.ShowDialog();
@@ -825,8 +672,15 @@ namespace BulkCropAndResizeTool
                 {
                     var action = dialog.Result;
                     if (action == OverwriteAction.Skip) return true;
-                    if (action == OverwriteAction.SkipAll) { batchAction = OverwriteAction.SkipAll; return true; }
-                    if (action == OverwriteAction.OverwriteAll) { batchAction = OverwriteAction.OverwriteAll; }
+                    if (action == OverwriteAction.SkipAll)
+                    {
+                        _batchAction = OverwriteAction.SkipAll;
+                        return true;
+                    }
+                    if (action == OverwriteAction.OverwriteAll)
+                    {
+                        _batchAction = OverwriteAction.OverwriteAll;
+                    }
                 }
                 else
                 {
@@ -836,12 +690,77 @@ namespace BulkCropAndResizeTool
             }
             return false;
         }
+
+        private async Task ProcessBatchAsync(string folderPath, string outputFolder)
+        {
+            var files = _fileService.GetImageFiles(folderPath);
+            if (files.Count == 0)
+            {
+                _logger.Log("No image files found in the source folder.");
+                return;
+            }
+
+            _logger.Log($"Starting batch processing for {files.Count} images...");
+
+            bool isResize = ActionResize.IsChecked == true;
+            string unit = GetCurrentUnit();
+            double angle = _imageState.CurrentRotation % 360;
+
+            Progress.Maximum = files.Count;
+            Progress.Value = 0;
+            CancelBtn.IsEnabled = true;
+            _cancellationTokenSource = new CancellationTokenSource();
+
+            var progressReporter = new Progress<int>(value =>
+            {
+                Progress.Value = value;
+            });
+
+            try
+            {
+                await _batchProcessor.ProcessBatchAsync(
+                    files,
+                    outputFolder,
+                    isResize,
+                    unit,
+                    angle,
+                    _imageState.OutputWidthPx,
+                    _imageState.OutputHeightPx,
+                    _imageState.MarginLeftPx,
+                    _imageState.MarginTopPx,
+                    _imageState.SourceWidthPx,
+                    _imageState.SourceHeightPx,
+                    PreSufBox.Text ?? "",
+                    ModePrefix.IsChecked == true,
+                    OverwriteChk.IsChecked == true,
+                    progressReporter,
+                    AppendLog,
+                    ShouldSkipFile,
+                    _cancellationTokenSource.Token);
+
+                if (OpenAfterChk.IsChecked == true)
+                    Process.Start("explorer.exe", outputFolder);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.Log("Batch processing cancelled.");
+            }
+            finally
+            {
+                CancelBtn.IsEnabled = false;
+                _cancellationTokenSource?.Dispose();
+                _cancellationTokenSource = null;
+            }
+        }
+
+        private void CancelBtn_Click(object sender, RoutedEventArgs e)
+        {
+            _cancellationTokenSource?.Cancel();
+        }
         #endregion
 
         #region Event Handlers
-        // ... (keep all your existing event handlers but delegate to helper methods)
 
-        // These are just examples - you'll need to wire them up
         private void Action_CheckedChanged(object sender, RoutedEventArgs e)
         {
             UpdateUnitAvailability();
@@ -858,7 +777,6 @@ namespace BulkCropAndResizeTool
             UpdateDimensionTextBoxes();
         }
 
-        // ... (all other event handlers follow the same pattern)
         #endregion
 
         #region Reset
@@ -912,71 +830,20 @@ namespace BulkCropAndResizeTool
         #endregion
 
         #region Zoom Event Handlers
-        private void FitBtn_Click(object sender, RoutedEventArgs e)
-        {
-            if (_imageState.OriginalImage == null) return;
-            _viewportState.ZoomMode = ZoomMode.Fit;
-            _viewportState.PanX = 0;
-            _viewportState.PanY = 0;
-            UpdatePreviewTransform();
-        }
+        private void FitBtn_Click(object sender, RoutedEventArgs e) => _viewportController.ZoomToFit();
 
-        private void ActualSizeBtn_Click(object sender, RoutedEventArgs e)
-        {
-            if (_imageState.OriginalImage == null) return;
-            _viewportState.ZoomMode = ZoomMode.Actual;
-            _viewportState.PanX = 0;
-            _viewportState.PanY = 0;
-            UpdatePreviewTransform();
-        }
+        private void ActualSizeBtn_Click(object sender, RoutedEventArgs e) => _viewportController.ZoomToActual();
 
-        private void ZoomInBtn_Click(object sender, RoutedEventArgs e)
-        {
-            if (_imageState.OriginalImage == null) return;
-            _viewportState.CustomZoom = _viewportState.CurrentScale * 1.1;
-            _viewportState.ZoomMode = ZoomMode.Custom;
-            UpdatePreviewTransform();
-        }
+        private void ZoomInBtn_Click(object sender, RoutedEventArgs e) => _viewportController.ZoomIn();
 
-        private void ZoomOutBtn_Click(object sender, RoutedEventArgs e)
-        {
-            if (_imageState.OriginalImage == null) return;
-            _viewportState.CustomZoom = _viewportState.CurrentScale / 1.1;
-            if (_viewportState.CustomZoom < 0.01) _viewportState.CustomZoom = 0.01;
-            _viewportState.ZoomMode = ZoomMode.Custom;
-            UpdatePreviewTransform();
-        }
+        private void ZoomOutBtn_Click(object sender, RoutedEventArgs e) => _viewportController.ZoomOut();
 
-        private void PanModeBtn_Click(object sender, RoutedEventArgs e)
-        {
-            _viewportState.IsPanMode = !_viewportState.IsPanMode;
-            PanModeBtn.Background = _viewportState.IsPanMode ? Brushes.LightBlue : Brushes.Transparent;
-
-            if (_viewportState.IsPanMode)
-            {
-                PreviewImage.Cursor = Cursors.Hand;
-                CropOverlay.IsHitTestVisible = false;
-            }
-            else
-            {
-                PreviewImage.Cursor = Cursors.Arrow;
-                CropOverlay.IsHitTestVisible = true;
-            }
-        }
+        private void PanModeBtn_Click(object sender, RoutedEventArgs e) => _viewportController.TogglePanMode();
         #endregion
 
         #region Scroll Event Handlers
-        private void ScrollBar_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isUpdatingUI || _imageState.OriginalImage == null) return;
-
-            if (sender == HScrollBar)
-                _viewportState.PanX = -HScrollBar.Value;
-            else if (sender == VScrollBar)
-                _viewportState.PanY = -VScrollBar.Value;
-
-            UpdatePreviewTransform();
-        }
+        private void ScrollBar_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) =>
+            _viewportController.OnScrollBarValueChanged(sender, e);
         #endregion
 
         #region Image Interaction Event Handlers
@@ -984,11 +851,7 @@ namespace BulkCropAndResizeTool
         {
             if (!_viewportState.IsPanMode || e.LeftButton != MouseButtonState.Pressed) return;
 
-            _viewportState.IsPanning = true;
-            _viewportState.PanStartMouse = e.GetPosition(this);
-            _viewportState.PanStartX = _viewportState.PanX;
-            _viewportState.PanStartY = _viewportState.PanY;
-            PreviewImage.CaptureMouse();
+            _viewportController.BeginPan(e.GetPosition(this));
             e.Handled = true;
         }
 
@@ -996,12 +859,7 @@ namespace BulkCropAndResizeTool
         {
             if (!_viewportState.IsPanning) return;
 
-            Point current = e.GetPosition(this);
-            double deltaX = current.X - _viewportState.PanStartMouse.X;
-            double deltaY = current.Y - _viewportState.PanStartMouse.Y;
-            _viewportState.PanX = _viewportState.PanStartX + deltaX;
-            _viewportState.PanY = _viewportState.PanStartY + deltaY;
-            UpdatePreviewTransform();
+            _viewportController.UpdatePan(e.GetPosition(this));
             e.Handled = true;
         }
 
@@ -1009,29 +867,13 @@ namespace BulkCropAndResizeTool
         {
             if (_viewportState.IsPanning)
             {
-                _viewportState.IsPanning = false;
-                PreviewImage.ReleaseMouseCapture();
+                _viewportController.EndPan();
                 e.Handled = true;
             }
         }
 
-        private void PreviewArea_MouseWheel(object sender, MouseWheelEventArgs e)
-        {
-            if (_imageState.OriginalImage == null) return;
-
-            double step = e.Delta;
-
-            if (Keyboard.Modifiers == ModifierKeys.Shift)
-            {
-                HScrollBar.Value = Math.Clamp(HScrollBar.Value - step, HScrollBar.Minimum, HScrollBar.Maximum);
-            }
-            else
-            {
-                VScrollBar.Value = Math.Clamp(VScrollBar.Value - step, VScrollBar.Minimum, VScrollBar.Maximum);
-            }
-
-            e.Handled = true;
-        }
+        private void PreviewArea_MouseWheel(object sender, MouseWheelEventArgs e) =>
+            _viewportController.HandleMouseWheel(e);
 
         private void PreviewCanvas_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
@@ -1076,20 +918,9 @@ namespace BulkCropAndResizeTool
             if (resizeMode == "Drag" && !inside)
                 return;
 
-            // You need to add these fields to your class (see below)
-            _isManipulating = true;
-            _resizeMode = resizeMode;
-            _startMousePos = pos;
-            _startMarginLeftPx = _imageState.MarginLeftPx;
-            _startMarginTopPx = _imageState.MarginTopPx;
-            _startWidthPx = _imageState.OutputWidthPx;
-            _startHeightPx = _imageState.OutputHeightPx;
-
-            CropOverlay.CaptureMouse();
+            _cropController.StartManipulation(pos, resizeMode);
             e.Handled = true;
         }
-
-        // Optional: Mouse move for cursor changes on crop overlay
         private void PreviewCanvas_MouseMove(object sender, MouseEventArgs e)
         {
             if (_imageState.OriginalImage == null || CropOverlay.Visibility != Visibility.Visible || _imageState.IsResizeMode)
@@ -1138,124 +969,24 @@ namespace BulkCropAndResizeTool
         #region Crop Overlay Event Handlers
         private void CropOverlay_MouseMove(object sender, MouseEventArgs e)
         {
-            if (_viewportState.IsPanMode) return;
-            if (!_isManipulating) return;
-            if (_imageState.IsResizeMode) return;
-
-            Point pos = e.GetPosition(PreviewCanvas);
-            double deltaX = pos.X - _startMousePos.X;
-            double deltaY = pos.Y - _startMousePos.Y;
-
-            int newMarginLeft = _startMarginLeftPx;
-            int newMarginTop = _startMarginTopPx;
-            int newWidth = _startWidthPx;
-            int newHeight = _startHeightPx;
-
-            switch (_resizeMode)
+            if (_cropController.IsManipulating)
             {
-                case "Drag":
-                    newMarginLeft = (int)Math.Round(_startMarginLeftPx + deltaX);
-                    newMarginTop = (int)Math.Round(_startMarginTopPx + deltaY);
-                    newMarginLeft = Math.Clamp(newMarginLeft, 0, _imageState.SourceWidthPx - newWidth);
-                    newMarginTop = Math.Clamp(newMarginTop, 0, _imageState.SourceHeightPx - newHeight);
-                    break;
-
-                case "ResizeLeft":
-                    newMarginLeft = (int)Math.Round(_startMarginLeftPx + deltaX);
-                    newWidth = _startWidthPx - (newMarginLeft - _startMarginLeftPx);
-                    if (newMarginLeft < 0) { newWidth += newMarginLeft; newMarginLeft = 0; }
-                    if (newWidth < 1) { newWidth = 1; newMarginLeft = Math.Min(newMarginLeft, _imageState.SourceWidthPx - 1); }
-                    if (newMarginLeft + newWidth > _imageState.SourceWidthPx) newWidth = _imageState.SourceWidthPx - newMarginLeft;
-                    break;
-
-                case "ResizeRight":
-                    newWidth = (int)Math.Round(_startWidthPx + deltaX);
-                    if (newWidth < 1) newWidth = 1;
-                    if (newMarginLeft + newWidth > _imageState.SourceWidthPx) newWidth = _imageState.SourceWidthPx - newMarginLeft;
-                    break;
-
-                case "ResizeTop":
-                    newMarginTop = (int)Math.Round(_startMarginTopPx + deltaY);
-                    newHeight = _startHeightPx - (newMarginTop - _startMarginTopPx);
-                    if (newMarginTop < 0) { newHeight += newMarginTop; newMarginTop = 0; }
-                    if (newHeight < 1) { newHeight = 1; newMarginTop = Math.Min(newMarginTop, _imageState.SourceHeightPx - 1); }
-                    if (newMarginTop + newHeight > _imageState.SourceHeightPx) newHeight = _imageState.SourceHeightPx - newMarginTop;
-                    break;
-
-                case "ResizeBottom":
-                    newHeight = (int)Math.Round(_startHeightPx + deltaY);
-                    if (newHeight < 1) newHeight = 1;
-                    if (newMarginTop + newHeight > _imageState.SourceHeightPx) newHeight = _imageState.SourceHeightPx - newMarginTop;
-                    break;
-
-                case "ResizeTopLeft":
-                    newMarginLeft = (int)Math.Round(_startMarginLeftPx + deltaX);
-                    newMarginTop = (int)Math.Round(_startMarginTopPx + deltaY);
-                    newWidth = _startWidthPx - (newMarginLeft - _startMarginLeftPx);
-                    newHeight = _startHeightPx - (newMarginTop - _startMarginTopPx);
-
-                    if (newMarginLeft < 0) { newWidth += newMarginLeft; newMarginLeft = 0; }
-                    if (newMarginTop < 0) { newHeight += newMarginTop; newMarginTop = 0; }
-                    if (newWidth < 1) { newWidth = 1; newMarginLeft = Math.Min(newMarginLeft, _imageState.SourceWidthPx - 1); }
-                    if (newHeight < 1) { newHeight = 1; newMarginTop = Math.Min(newMarginTop, _imageState.SourceHeightPx - 1); }
-                    if (newMarginLeft + newWidth > _imageState.SourceWidthPx) newWidth = _imageState.SourceWidthPx - newMarginLeft;
-                    if (newMarginTop + newHeight > _imageState.SourceHeightPx) newHeight = _imageState.SourceHeightPx - newMarginTop;
-                    break;
-
-                case "ResizeTopRight":
-                    newMarginTop = (int)Math.Round(_startMarginTopPx + deltaY);
-                    newWidth = (int)Math.Round(_startWidthPx + deltaX);
-                    newHeight = _startHeightPx - (newMarginTop - _startMarginTopPx);
-
-                    if (newMarginTop < 0) { newHeight += newMarginTop; newMarginTop = 0; }
-                    if (newWidth < 1) newWidth = 1;
-                    if (newHeight < 1) { newHeight = 1; newMarginTop = Math.Min(newMarginTop, _imageState.SourceHeightPx - 1); }
-                    if (newMarginLeft + newWidth > _imageState.SourceWidthPx) newWidth = _imageState.SourceWidthPx - newMarginLeft;
-                    if (newMarginTop + newHeight > _imageState.SourceHeightPx) newHeight = _imageState.SourceHeightPx - newMarginTop;
-                    break;
-
-                case "ResizeBottomLeft":
-                    newMarginLeft = (int)Math.Round(_startMarginLeftPx + deltaX);
-                    newHeight = (int)Math.Round(_startHeightPx + deltaY);
-                    newWidth = _startWidthPx - (newMarginLeft - _startMarginLeftPx);
-
-                    if (newMarginLeft < 0) { newWidth += newMarginLeft; newMarginLeft = 0; }
-                    if (newWidth < 1) { newWidth = 1; newMarginLeft = Math.Min(newMarginLeft, _imageState.SourceWidthPx - 1); }
-                    if (newHeight < 1) newHeight = 1;
-                    if (newMarginLeft + newWidth > _imageState.SourceWidthPx) newWidth = _imageState.SourceWidthPx - newMarginLeft;
-                    if (newMarginTop + newHeight > _imageState.SourceHeightPx) newHeight = _imageState.SourceHeightPx - newMarginTop;
-                    break;
-
-                case "ResizeBottomRight":
-                    newWidth = (int)Math.Round(_startWidthPx + deltaX);
-                    newHeight = (int)Math.Round(_startHeightPx + deltaY);
-                    if (newWidth < 1) newWidth = 1;
-                    if (newHeight < 1) newHeight = 1;
-                    if (newMarginLeft + newWidth > _imageState.SourceWidthPx) newWidth = _imageState.SourceWidthPx - newMarginLeft;
-                    if (newMarginTop + newHeight > _imageState.SourceHeightPx) newHeight = _imageState.SourceHeightPx - newMarginTop;
-                    break;
+                Point pos = e.GetPosition(PreviewCanvas);
+                _cropController.UpdateManipulation(pos, UpdateDimensionTextBoxes);
+                e.Handled = true;
             }
-
-            _imageState.MarginLeftPx = newMarginLeft;
-            _imageState.MarginTopPx = newMarginTop;
-            _imageState.OutputWidthPx = newWidth;
-            _imageState.OutputHeightPx = newHeight;
-
-            UpdateDimensionTextBoxes();
-            e.Handled = true;
         }
 
         private void CropOverlay_MouseUp(object sender, MouseButtonEventArgs e)
         {
-            if (_isManipulating)
+            if (_cropController.IsManipulating)
             {
-                _isManipulating = false;
-                _resizeMode = string.Empty;
-                CropOverlay.ReleaseMouseCapture();
+                _cropController.EndManipulation();
                 Cursor = Cursors.Arrow;
                 e.Handled = true;
             }
         }
+        
         #endregion
 
         #region Dimension Event Handlers
@@ -1377,7 +1108,7 @@ namespace BulkCropAndResizeTool
         {
             if (_imageState.IsResizeMode || CropOverlay.Visibility != Visibility.Visible)
                 return;
-            if (_isManipulating) return;
+            if (_cropController.IsManipulating) return;
 
             int step = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? 10 : 1;
             int dx = 0, dy = 0;
@@ -1394,7 +1125,6 @@ namespace BulkCropAndResizeTool
             MoveOverlay(dx, dy);
             e.Handled = true;
         }
-
         private void MoveOverlay(int dx, int dy)
         {
             int newLeft = _imageState.MarginLeftPx + dx;
@@ -1466,7 +1196,7 @@ namespace BulkCropAndResizeTool
             dialog.Description = "Select a folder containing images";
             dialog.ShowNewFolderButton = false;
 
-            if (!string.IsNullOrEmpty(initialPath) && Directory.Exists(initialPath))
+            if (!string.IsNullOrEmpty(initialPath) && System.IO.Directory.Exists(initialPath))
             {
                 dialog.SelectedPath = initialPath;
             }
@@ -1682,7 +1412,7 @@ namespace BulkCropAndResizeTool
 
             if (string.IsNullOrWhiteSpace(path) || path == AppConstants.DefaultDstBoxText)
             {
-                SetDirectoryPath(path);
+                SetDirectoryPath(AppConstants.DefaultDstBoxText);
                 DstBox.Foreground = System.Windows.Media.Brushes.MediumPurple;
                 DstBox.FontStyle = FontStyles.Italic;
                 return;
@@ -1692,8 +1422,6 @@ namespace BulkCropAndResizeTool
             if (validPath != null)
             {
                 SetDirectoryPath(validPath);
-                DstBox.Foreground = System.Windows.Media.Brushes.Black;
-                DstBox.FontStyle = FontStyles.Normal;
             }
             else
             {

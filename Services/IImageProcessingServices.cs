@@ -34,7 +34,7 @@ namespace BulkCropAndResizeTool.Services
     public class ImageProcessingService
     {
         private const double Dpi = 96.0;
-        public static BitmapSource LoadImageFromFile(string filePath)
+        public BitmapSource LoadImageFromFile(string filePath)
         {
             try
             {
@@ -122,7 +122,7 @@ namespace BulkCropAndResizeTool.Services
                     $"Failed to load image '{filePath}'.", ex);
             }
         }
-        public static BitmapSource? RotateImage(BitmapSource source, double angle)
+        public BitmapSource? RotateImage(BitmapSource source, double angle)
         {
             if (source == null || Math.Abs(angle % 360) < 0.001)
                 return source;
@@ -132,7 +132,7 @@ namespace BulkCropAndResizeTool.Services
             rotated.Freeze();
             return rotated;
         }
-        public static BitmapSource? ResizeImage(BitmapSource source, int targetWidth, int targetHeight)
+        public BitmapSource? ResizeImage(BitmapSource source, int targetWidth, int targetHeight)
         {
             if (source == null) return null;
             if (targetWidth <= 0 || targetHeight <= 0) return source;
@@ -144,7 +144,7 @@ namespace BulkCropAndResizeTool.Services
             resized.Freeze();
             return resized;
         }
-        public static CroppedBitmap CropImage(BitmapSource source, double rotationAngle, int cropX, int cropY, int cropW, int cropH)
+        public CroppedBitmap CropImage(BitmapSource source, double rotationAngle, int cropX, int cropY, int cropW, int cropH)
         {
             BitmapSource rotated = source;
             if (Math.Abs(rotationAngle % 360) > 0.001)
@@ -166,7 +166,7 @@ namespace BulkCropAndResizeTool.Services
             cropped.Freeze();
             return cropped;
         }
-        public static BitmapSource? ProcessImage( BitmapSource source, bool isResize, string unit, double angle, int outputWidth, int outputHeight, int marginLeft, int marginTop,  double? percentW = null, double? percentH = null)
+        public BitmapSource? ProcessImage( BitmapSource source, bool isResize, string unit, double angle, int outputWidth, int outputHeight, int marginLeft, int marginTop,  double? percentW = null, double? percentH = null)
         {
             if (source == null) return null;
 
@@ -183,7 +183,7 @@ namespace BulkCropAndResizeTool.Services
                 return ProcessCrop(rotated, marginLeft, marginTop, outputWidth, outputHeight);
             }
         }
-        private static BitmapSource? ProcessResize( BitmapSource rotated, string unit, int outputWidth, int outputHeight, double? percentW, double? percentH)
+        private BitmapSource? ProcessResize( BitmapSource rotated, string unit, int outputWidth, int outputHeight, double? percentW, double? percentH)
         {
             int targetW, targetH;
 
@@ -204,11 +204,11 @@ namespace BulkCropAndResizeTool.Services
 
             return ResizeImage(rotated, targetW, targetH);
         }
-        private static CroppedBitmap? ProcessCrop(BitmapSource rotated, int marginLeft, int marginTop, int outputWidth, int outputHeight)
+        private CroppedBitmap? ProcessCrop(BitmapSource rotated, int marginLeft, int marginTop, int outputWidth, int outputHeight)
         {
             return CropImage(rotated, 0,marginLeft, marginTop, outputWidth, outputHeight);
         }
-        public static void SaveImage (BitmapSource image, string filePath, string format = ".jpg", int quality = 90)
+        public void SaveImage (BitmapSource image, string filePath, string format = ".jpg", int quality = 90)
         {
             ArgumentNullException.ThrowIfNull(image);
 
@@ -218,7 +218,7 @@ namespace BulkCropAndResizeTool.Services
             using var stream = new FileStream(filePath, FileMode.Create, FileAccess.Write);
             encoder.Save(stream);
         }
-        private static BitmapEncoder CreateEncoder(string format, int quality)
+        private BitmapEncoder CreateEncoder(string format, int quality)
         {
             return format.ToLower() switch
             {
