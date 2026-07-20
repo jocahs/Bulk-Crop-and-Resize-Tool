@@ -7,39 +7,43 @@ using Xceed.Wpf.Toolkit;
 
 namespace BulkCropAndResizeTool.Controls
 {
+    public record CropDimensionControls(
+    TextBox WidthSourceBox,
+    TextBox HeightSourceBox,
+    IntegerUpDown WidthBox,
+    IntegerUpDown HeightBox,
+    IntegerUpDown MarginLeftBox,
+    IntegerUpDown MarginTopBox,
+    RadioButton UnitPixels,
+    RadioButton UnitMM,
+    RadioButton UnitPercent,
+    RadioButton ModeResize,
+    CheckBox AspectRatio,
+    GroupBox AspectRatioGroup,
+    GroupBox MarginsSettings,
+    Border CropOverlay
+);
+
     public class CropDimensionsController(
-        TextBox widthSourceBox,
-        TextBox heightSourceBox,
-        IntegerUpDown widthBox,
-        IntegerUpDown heightBox,
-        IntegerUpDown marginLeftBox,
-        IntegerUpDown marginTopBox,
-        RadioButton unitPixels,
-        RadioButton unitMM,
-        RadioButton unitPercent,
-        RadioButton modeResize,
-        CheckBox aspectRatio,
-        GroupBox aspectRatioGroup,
-        GroupBox marginsSettings,
-        Border cropOverlay,
+        CropDimensionControls controls,
         ImageState imageState,
         Action onCropOverlayUpdateNeeded,
         Action setActionBtnText)
     {
-        private readonly TextBox _widthSourceBox = widthSourceBox;
-        private readonly TextBox _heightSourceBox = heightSourceBox;
-        private readonly IntegerUpDown _widthBox = widthBox;
-        private readonly IntegerUpDown _heightBox = heightBox;
-        private readonly IntegerUpDown _marginLeftBox = marginLeftBox;
-        private readonly IntegerUpDown _marginTopBox = marginTopBox;
-        private readonly RadioButton _unitPixels = unitPixels;
-        private readonly RadioButton _unitMM = unitMM;
-        private readonly RadioButton _unitPercent = unitPercent;
-        private readonly RadioButton _modeResize = modeResize;
-        private readonly CheckBox _aspectRatio = aspectRatio;
-        private readonly GroupBox _aspectRatioGroup = aspectRatioGroup;
-        private readonly GroupBox _marginsSettings = marginsSettings;
-        private readonly Border _cropOverlay = cropOverlay;
+        private readonly TextBox _widthSourceBox = controls.WidthSourceBox;
+        private readonly TextBox _heightSourceBox = controls.HeightSourceBox;
+        private readonly IntegerUpDown _widthBox = controls.WidthBox;
+        private readonly IntegerUpDown _heightBox = controls.HeightBox;
+        private readonly IntegerUpDown _marginLeftBox = controls.MarginLeftBox;
+        private readonly IntegerUpDown _marginTopBox = controls.MarginTopBox;
+        private readonly RadioButton _unitPixels = controls.UnitPixels;
+        private readonly RadioButton _unitMM = controls.UnitMM;
+        private readonly RadioButton _unitPercent = controls.UnitPercent;
+        private readonly RadioButton _modeResize = controls.ModeResize;
+        private readonly CheckBox _aspectRatio = controls.AspectRatio;
+        private readonly GroupBox _aspectRatioGroup = controls.AspectRatioGroup;
+        private readonly GroupBox _marginsSettings = controls.MarginsSettings;
+        private readonly Border _cropOverlay = controls.CropOverlay;
         private readonly ImageState _imageState = imageState;
         private readonly Action _onCropOverlayUpdateNeeded = onCropOverlayUpdateNeeded;
         private readonly Action _setActionBtnText = setActionBtnText;
@@ -92,40 +96,26 @@ namespace BulkCropAndResizeTool.Controls
 
        private void ClampCropRectangle()
        {
+            
             _imageState.OutputWidthPx =
-                Math.Max(1, _imageState.OutputWidthPx);
+                Math.Min(
+                    Math.Max(1, _imageState.OutputWidthPx),
+                    _imageState.SourceWidthPx);
 
             _imageState.OutputHeightPx =
-                Math.Max(1, _imageState.OutputHeightPx);
+                Math.Min(
+                    Math.Max(1, _imageState.OutputHeightPx),
+                    _imageState.SourceHeightPx);
 
             _imageState.MarginLeftPx =
-                Math.Max(0, _imageState.MarginLeftPx);
+                Math.Min(
+                    Math.Max(0, _imageState.MarginLeftPx),
+                    _imageState.SourceWidthPx - 1);
 
             _imageState.MarginTopPx =
-                Math.Max(0, _imageState.MarginTopPx);
-
-            if (_imageState.IsCropMode)
-            {
-                _imageState.OutputWidthPx =
-                    Math.Min(
-                        _imageState.OutputWidthPx,
-                        _imageState.SourceWidthPx);
-
-                _imageState.OutputHeightPx =
-                    Math.Min(
-                        _imageState.OutputHeightPx,
-                        _imageState.SourceHeightPx);
-
-                _imageState.MarginLeftPx =
-                    Math.Min(
-                        _imageState.MarginLeftPx,
-                        _imageState.SourceWidthPx - 1);
-
-                _imageState.MarginTopPx =
-                    Math.Min(
-                        _imageState.MarginTopPx,
-                        _imageState.SourceHeightPx - 1);
-            }
+                Math.Min(
+                    Math.Max(0, _imageState.MarginTopPx),
+                    _imageState.SourceHeightPx - 1);
         }
 
         #endregion
@@ -156,22 +146,6 @@ namespace BulkCropAndResizeTool.Controls
         #endregion
 
         #region Dimension / Margin Box Events
-
-        private int UpdatePixelFromBox(IntegerUpDown box, int sourceDimensionPx, bool clampToMin = true)
-        {
-            string unit = GetCurrentUnit();
-            double displayValue = box.Value ?? 0;
-
-            if (unit == "%")
-            {
-                int result = (int)Math.Round(displayValue / 100.0 * sourceDimensionPx);
-                return clampToMin && result < 1 ? 1 : result;
-            }
-            else
-            {
-                return UnitConverter.ConvertUnitToPixels(displayValue, unit, clampToMin);
-            }
-        }
 
         public void RefreshUI(IntegerUpDown? skipBox = null)
         {
@@ -237,97 +211,6 @@ namespace BulkCropAndResizeTool.Controls
                 _onCropOverlayUpdateNeeded?.Invoke();
             }
         }
-        public void OnDimensionBoxLostFocus()
-        {
-            if (_isSyncingUI) return;
-            UpdateDimensionTextBoxes();
-        }
-        private void RecalculateAfterOutputChanged()
-        {
-            // Output is authoritative
-
-            _imageState.OutputWidthPx =
-                Math.Clamp(_imageState.OutputWidthPx, 1, _imageState.SourceWidthPx);
-
-            _imageState.OutputHeightPx =
-                Math.Clamp(_imageState.OutputHeightPx, 1, _imageState.SourceHeightPx);
-
-            _imageState.MarginLeftPx =
-                Math.Min(
-                    _imageState.MarginLeftPx,
-                    _imageState.SourceWidthPx - _imageState.OutputWidthPx);
-
-            _imageState.MarginTopPx =
-                Math.Min(
-                    _imageState.MarginTopPx,
-                    _imageState.SourceHeightPx - _imageState.OutputHeightPx);
-
-            _imageState.MarginLeftPx =
-                Math.Max(0, _imageState.MarginLeftPx);
-
-            _imageState.MarginTopPx =
-                Math.Max(0, _imageState.MarginTopPx);
-        }
-        private void RecalculateAfterMarginChanged()
-        {
-            // Margin is authoritative
-
-            _imageState.MarginLeftPx =
-                Math.Clamp(
-                    _imageState.MarginLeftPx,
-                    0,
-                    _imageState.SourceWidthPx - 1);
-
-            _imageState.MarginTopPx =
-                Math.Clamp(
-                    _imageState.MarginTopPx,
-                    0,
-                    _imageState.SourceHeightPx - 1);
-
-            _imageState.OutputWidthPx =
-                Math.Min(
-                    _imageState.OutputWidthPx,
-                    _imageState.SourceWidthPx - _imageState.MarginLeftPx);
-
-            _imageState.OutputHeightPx =
-                Math.Min(
-                    _imageState.OutputHeightPx,
-                    _imageState.SourceHeightPx - _imageState.MarginTopPx);
-
-            _imageState.OutputWidthPx =
-                Math.Max(1, _imageState.OutputWidthPx);
-
-            _imageState.OutputHeightPx =
-                Math.Max(1, _imageState.OutputHeightPx);
-        }
-        public void OnDimensionBoxValueChanged(object sender, bool windowIsLoaded)
-        {
-            if (_isSyncingUI || !windowIsLoaded) return;
-
-            if (sender == _widthBox)
-                _imageState.OutputWidthPx = UpdatePixelFromBox(_widthBox, _imageState.SourceWidthPx, true);
-
-            else if (sender == _heightBox)
-                _imageState.OutputHeightPx = UpdatePixelFromBox(_heightBox, _imageState.SourceHeightPx, true);
-
-            if (_aspectRatio.IsChecked == true)
-                AdjustAspectRatio(anchorIsWidth: sender == _widthBox);
-
-            RecalculateAfterOutputChanged();
-            RefreshUI();
-        }
-
-        public void OnMarginBoxValueChanged(object sender)
-        {
-            if (sender == _marginLeftBox)
-                _imageState.MarginLeftPx = UpdatePixelFromBox(_marginLeftBox, _imageState.SourceWidthPx, false);
-
-            else if (sender == _marginTopBox)
-                _imageState.MarginTopPx = UpdatePixelFromBox(_marginTopBox, _imageState.SourceHeightPx, false);
-
-            RecalculateAfterMarginChanged();
-            RefreshUI();
-        }
         
         #endregion
 
@@ -341,8 +224,15 @@ namespace BulkCropAndResizeTool.Controls
             _imageState.IsEditingOutput = true;
             _imageState.IsEditingMargin = false;
 
-            // Parse the raw input value (what user typed, even if invalid intermediate)
-            double displayValue = _activeOutputBox?.Value ?? 0;
+            int? boxValue = _activeOutputBox?.Value;
+            if (boxValue == null)
+            {
+                // Box cleared mid-edit — don't treat blank as 0. Leave everything else as-is.
+                UpdateDimensionTextBoxes(skipBox: _activeOutputBox);
+                return;
+            }
+
+            double displayValue = boxValue.Value;
             string unit = GetCurrentUnit();
 
             // Compute what the output WOULD be (preview)
@@ -404,7 +294,14 @@ namespace BulkCropAndResizeTool.Controls
             _imageState.IsEditingMargin = true;
             _imageState.IsEditingOutput = false;
 
-            double displayValue = _activeMarginBox?.Value ?? 0;
+            int? boxValue = _activeMarginBox?.Value;
+            if (boxValue == null)
+            {
+                UpdateDimensionTextBoxes(skipBox: _activeMarginBox);
+                return;
+            }
+
+            double displayValue = boxValue.Value;
             string unit = GetCurrentUnit();
 
             // Compute preview margins
@@ -450,16 +347,19 @@ namespace BulkCropAndResizeTool.Controls
         {
             if (!_imageState.IsEditingOutput) return;
 
-            // Commit preview values to actual state
-            if (_imageState.PreviewOutputWidthPx.HasValue)
-                _imageState.OutputWidthPx = _imageState.PreviewOutputWidthPx.Value;
-            if (_imageState.PreviewOutputHeightPx.HasValue)
-                _imageState.OutputHeightPx = _imageState.PreviewOutputHeightPx.Value;
-            if (_imageState.PreviewMarginLeftPx.HasValue)
-                _imageState.MarginLeftPx = _imageState.PreviewMarginLeftPx.Value;
-            if (_imageState.PreviewMarginTopPx.HasValue)
-                _imageState.MarginTopPx = _imageState.PreviewMarginTopPx.Value;
+            bool boxIsEmpty = _activeOutputBox?.Value == null;
 
+            if (!boxIsEmpty)
+            {
+                if (_imageState.PreviewOutputWidthPx.HasValue)
+                    _imageState.OutputWidthPx = _imageState.PreviewOutputWidthPx.Value;
+                if (_imageState.PreviewOutputHeightPx.HasValue)
+                    _imageState.OutputHeightPx = _imageState.PreviewOutputHeightPx.Value;
+                if (_imageState.PreviewMarginLeftPx.HasValue)
+                    _imageState.MarginLeftPx = _imageState.PreviewMarginLeftPx.Value;
+                if (_imageState.PreviewMarginTopPx.HasValue)
+                    _imageState.MarginTopPx = _imageState.PreviewMarginTopPx.Value;
+            }
             _imageState.ClearPreviews();
             _activeOutputBox = null;
 
@@ -471,14 +371,19 @@ namespace BulkCropAndResizeTool.Controls
         {
             if (!_imageState.IsEditingMargin) return;
 
-            if (_imageState.PreviewMarginLeftPx.HasValue)
-                _imageState.MarginLeftPx = _imageState.PreviewMarginLeftPx.Value;
-            if (_imageState.PreviewMarginTopPx.HasValue)
-                _imageState.MarginTopPx = _imageState.PreviewMarginTopPx.Value;
-            if (_imageState.PreviewOutputWidthPx.HasValue)
-                _imageState.OutputWidthPx = _imageState.PreviewOutputWidthPx.Value;
-            if (_imageState.PreviewOutputHeightPx.HasValue)
-                _imageState.OutputHeightPx = _imageState.PreviewOutputHeightPx.Value;
+            bool boxIsEmpty = _activeMarginBox?.Value == null;
+
+            if (!boxIsEmpty)
+            {
+                if (_imageState.PreviewMarginLeftPx.HasValue)
+                    _imageState.MarginLeftPx = _imageState.PreviewMarginLeftPx.Value;
+                if (_imageState.PreviewMarginTopPx.HasValue)
+                    _imageState.MarginTopPx = _imageState.PreviewMarginTopPx.Value;
+                if (_imageState.PreviewOutputWidthPx.HasValue)
+                    _imageState.OutputWidthPx = _imageState.PreviewOutputWidthPx.Value;
+                if (_imageState.PreviewOutputHeightPx.HasValue)
+                    _imageState.OutputHeightPx = _imageState.PreviewOutputHeightPx.Value;
+            }
 
             _imageState.ClearPreviews();
             _activeMarginBox = null;

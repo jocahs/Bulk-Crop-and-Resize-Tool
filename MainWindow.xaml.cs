@@ -60,9 +60,15 @@ namespace BulkCropAndResizeTool
                 PreviewCanvas, PreviewImage, CropOverlay, HScrollBar, VScrollBar, ZoomLabel, PanModeBtn,
                 _imageState, _viewportState, UpdateCropOverlay);
             _dimensionsController = new CropDimensionsController(
-                WidthSourceBox, HeightSourceBox, WidthBox, HeightBox, MarginLeftBox, MargintopBox,
-                UnitPixels, UnitMM, UnitPer, ModeResize, AspectRatio, AspectRatioGroup, MarginsSettings,
-                CropOverlay, _imageState, UpdateCropOverlay, SetActionBtnText);
+                new CropDimensionControls(
+                    WidthSourceBox, HeightSourceBox, WidthBox, HeightBox, MarginLeftBox, MargintopBox,
+                    UnitPixels, UnitMM, UnitPer, ModeResize, AspectRatio, AspectRatioGroup, MarginsSettings,
+                    CropOverlay
+                ),
+                _imageState,
+                UpdateCropOverlay,
+                SetActionBtnText
+            );
 
             InitializeApplication();
         }
@@ -115,8 +121,8 @@ namespace BulkCropAndResizeTool
             ModePrefix.Checked += (s, e) => UpdateFilenameUI();
             ModeSuffix.Checked += (s, e) => UpdateFilenameUI();
             PreSufBox.LostFocus += PreSufBox_LostFocus;
-            OverwriteChk.Checked += (s, e) => UpdateFilenameUI();
-            OverwriteChk.Unchecked += (s, e) => UpdateFilenameUI();
+            OverwriteChk.Checked += (s, e) => UpdateFilenameAvailability();
+            OverwriteChk.Unchecked += (s, e) => UpdateFilenameAvailability();
 
             // Image interactions
             PreviewImage.MouseDown += PreviewImage_MouseDown;   
@@ -230,7 +236,6 @@ namespace BulkCropAndResizeTool
             ActionBtn.IsEnabled = false;
             _imageState.OriginalImage = null;
         }
-
         private void UpdateDisplayedImage()
         {
             if (_imageState.OriginalImage == null) return;
@@ -266,7 +271,6 @@ namespace BulkCropAndResizeTool
             var display = _imageService.RotateImage(_imageState.OriginalImage, _imageState.CurrentRotation);
             PreviewImage.Source = display ?? _imageState.OriginalImage;
         }
-
         private void RotateImage(double degrees)
         {
             _imageState.CurrentRotation += degrees;
@@ -333,7 +337,6 @@ namespace BulkCropAndResizeTool
 
             LayoutPositioning();
         }
-
         private string GetDefaultFilenameText(bool isResize, bool isPrefix)
         {
             if (isResize)
@@ -353,7 +356,6 @@ namespace BulkCropAndResizeTool
             }
             return isPrefix ? AppConstants.DefaultCropPrefix : AppConstants.DefaultCropSuffix;
         }
-
         private void UpdateFilenameAvailability()
         {
             bool isEnabled = OverwriteChk.IsChecked == true;
@@ -372,7 +374,6 @@ namespace BulkCropAndResizeTool
                 NameStackPanel.Children.Add(NameExtension);
             }
         }
-
         private void UpdateSourceFilename()
         {
             string path = SrcBox.Text;
@@ -410,7 +411,6 @@ namespace BulkCropAndResizeTool
             NameSource.Text = baseName;
             NameExtension.Text = fileExtension;
         }
-
         private void LayoutPositioning()
         {
             bool isPrefix = ModePrefix.IsChecked == true;
@@ -588,7 +588,6 @@ namespace BulkCropAndResizeTool
             }
             return false;
         }
-
         private async Task ProcessBatchAsync(string folderPath, string outputFolder)
         {
             var files = _fileService.GetImageFiles(folderPath);
@@ -1145,9 +1144,9 @@ namespace BulkCropAndResizeTool
                 return;
             }
 
-            ActionBtn.Content = (ModeCrop.IsChecked == true) ?
-                (CurrentFileCount !> 1 ? AppConstants.DefaultSingleCrop : AppConstants.DefaultMultiCrop) :
-                (CurrentFileCount !> 1 ? AppConstants.DefaultSingleResize : AppConstants.DefaultMultiResize);
+            ActionBtn.Content = ModeCrop.IsChecked == true
+                ? (CurrentFileCount <= 1 ? AppConstants.DefaultSingleCrop : AppConstants.DefaultMultiCrop)
+                : (CurrentFileCount <= 1 ? AppConstants.DefaultSingleResize : AppConstants.DefaultMultiResize);
         }
         private void SetDirectoryPath(string path)
         {
