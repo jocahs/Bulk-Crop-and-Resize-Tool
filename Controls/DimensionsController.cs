@@ -52,6 +52,20 @@ namespace BulkCropAndResizeTool.Controls
 
         private bool _isSyncingUI;
 
+        // Ensure an action runs on the UI Dispatcher when required
+        private void EnsureOnUI(Action action)
+        {
+            var app = Application.Current;
+            if (app != null && !app.Dispatcher.CheckAccess())
+            {
+                app.Dispatcher.Invoke(action);
+            }
+            else
+            {
+                action();
+            }
+        }
+
         #region Unit Management
 
         public string GetCurrentUnit()
@@ -61,23 +75,44 @@ namespace BulkCropAndResizeTool.Controls
 
         public void UpdateUnitAvailability()
         {
-            bool isResize = _modeResize.IsChecked == true;
-            _unitPercent.IsEnabled = isResize;
-            _unitPercent.IsChecked = isResize;
-            _aspectRatio.IsChecked = isResize;
-            _aspectRatioGroup.Visibility = isResize ? Visibility.Visible : Visibility.Collapsed;
-            _marginsSettings.Visibility = !isResize ? Visibility.Visible : Visibility.Collapsed;
-            _setActionBtnText();
-            _imageState.IsCropMode = !isResize;
-            _cropOverlay.Visibility = !isResize ? Visibility.Visible : Visibility.Hidden; 
-            
-            if (_imageState.OriginalImage == null)
+            EnsureOnUI(() =>
             {
-                _cropOverlay.Visibility = Visibility.Hidden;
-            }            
+                bool isResize = _modeResize?.IsChecked == true;
 
-            if (!isResize && _unitMM.IsChecked == false)
-                _unitPixels.IsChecked = true;
+                if (_unitPercent != null)
+                {
+                    _unitPercent.IsEnabled = isResize;
+                    _unitPercent.IsChecked = isResize;
+                }
+
+                if (_aspectRatio != null)
+                    _aspectRatio.IsChecked = isResize;
+
+                if (_aspectRatioGroup != null)
+                    _aspectRatioGroup.Visibility = isResize ? Visibility.Visible : Visibility.Collapsed;
+
+                if (_marginsSettings != null)
+                    _marginsSettings.Visibility = !isResize ? Visibility.Visible : Visibility.Collapsed;
+
+                _setActionBtnText?.Invoke();
+
+                _imageState.IsCropMode = !isResize;
+
+                if (_cropOverlay != null)
+                    _cropOverlay.Visibility = !isResize ? Visibility.Visible : Visibility.Hidden;
+
+                if (_imageState.OriginalImage == null)
+                {
+                    if (_cropOverlay != null)
+                        _cropOverlay.Visibility = Visibility.Hidden;
+                }
+
+                if (!isResize && (_unitMM?.IsChecked ?? false) == false)
+                {
+                    if (_unitPixels != null)
+                        _unitPixels.IsChecked = true;
+                }
+            });
         }
 
         public void OnUnitChanged()
@@ -152,57 +187,63 @@ namespace BulkCropAndResizeTool.Controls
             if (_isSyncingUI) return;
             _isSyncingUI = true;
 
-            try
+            EnsureOnUI(() =>
             {
-                string unit = GetCurrentUnit();
-
-                int outputW = _imageState.PreviewOutputWidthPx ?? _imageState.OutputWidthPx;
-                int outputH = _imageState.PreviewOutputHeightPx ?? _imageState.OutputHeightPx;
-                int marginL = _imageState.PreviewMarginLeftPx ?? _imageState.MarginLeftPx;
-                int marginT = _imageState.PreviewMarginTopPx ?? _imageState.MarginTopPx;
-
-                if (unit == "%")
+                try
                 {
-                    _widthSourceBox.Text = "100";
-                    _heightSourceBox.Text = "100";
+                    string unit = GetCurrentUnit();
 
-                    double percentW = (double)outputW / _imageState.SourceWidthPx * 100;
-                    double percentH = (double)outputH / _imageState.SourceHeightPx * 100;
+                    int outputW = _imageState.PreviewOutputWidthPx ?? _imageState.OutputWidthPx;
+                    int outputH = _imageState.PreviewOutputHeightPx ?? _imageState.OutputHeightPx;
+                    int marginL = _imageState.PreviewMarginLeftPx ?? _imageState.MarginLeftPx;
+                    int marginT = _imageState.PreviewMarginTopPx ?? _imageState.MarginTopPx;
 
-                    if (skipBox != _widthBox) _widthBox.Value = (int)Math.Round(Math.Max(1, percentW));
-                    if (skipBox != _heightBox) _heightBox.Value = (int)Math.Round(Math.Max(1, percentH));
-                    if (skipBox != _marginLeftBox) _marginLeftBox.Value = 0;
-                    if (skipBox != _marginTopBox) _marginTopBox.Value = 0;
+                    if (_imageState.SourceWidthPx <= 0) _imageState.SourceWidthPx = 1;
+                    if (_imageState.SourceHeightPx <= 0) _imageState.SourceHeightPx = 1;
+
+                    if (unit == "%")
+                    {
+                        if (_widthSourceBox != null) _widthSourceBox.Text = "100";
+                        if (_heightSourceBox != null) _heightSourceBox.Text = "100";
+
+                        double percentW = (double)outputW / _imageState.SourceWidthPx * 100;
+                        double percentH = (double)outputH / _imageState.SourceHeightPx * 100;
+
+                        if (skipBox != _widthBox && _widthBox != null) _widthBox.Value = (int)Math.Round(Math.Max(1, percentW));
+                        if (skipBox != _heightBox && _heightBox != null) _heightBox.Value = (int)Math.Round(Math.Max(1, percentH));
+                        if (skipBox != _marginLeftBox && _marginLeftBox != null) _marginLeftBox.Value = 0;
+                        if (skipBox != _marginTopBox && _marginTopBox != null) _marginTopBox.Value = 0;
+                    }
+                    else
+                    {
+                        int widthSourceDisplay = Math.Max(1, (int)Math.Round(UnitConverter.ConvertPixelsToUnit(_imageState.SourceWidthPx, unit)));
+                        int heightSourceDisplay = Math.Max(1, (int)Math.Round(UnitConverter.ConvertPixelsToUnit(_imageState.SourceHeightPx, unit)));
+                        int widthOutputDisplay = Math.Max(1, (int)Math.Round(UnitConverter.ConvertPixelsToUnit(outputW, unit)));
+                        int heightOutputDisplay = Math.Max(1, (int)Math.Round(UnitConverter.ConvertPixelsToUnit(outputH, unit)));
+
+                        if (_widthSourceBox != null) _widthSourceBox.Text = widthSourceDisplay.ToString();
+                        if (_heightSourceBox != null) _heightSourceBox.Text = heightSourceDisplay.ToString();
+
+                        if (skipBox != _widthBox && _widthBox != null) _widthBox.Value = widthOutputDisplay;
+                        if (skipBox != _heightBox && _heightBox != null) _heightBox.Value = heightOutputDisplay;
+
+                        if (skipBox != _marginLeftBox && _marginLeftBox != null)
+                            _marginLeftBox.Value = Math.Min(
+                                (int)Math.Round(UnitConverter.ConvertPixelsToUnit(marginL, unit)),
+                                Math.Max(0, widthSourceDisplay - widthOutputDisplay));
+
+                        if (skipBox != _marginTopBox && _marginTopBox != null)
+                            _marginTopBox.Value = Math.Min(
+                                (int)Math.Round(UnitConverter.ConvertPixelsToUnit(marginT, unit)),
+                                Math.Max(0, heightSourceDisplay - heightOutputDisplay));
+                    }
                 }
-                else
+                finally
                 {
-                    int widthSourceDisplay = Math.Max(1, (int)Math.Round(UnitConverter.ConvertPixelsToUnit(_imageState.SourceWidthPx, unit)));
-                    int heightSourceDisplay = Math.Max(1, (int)Math.Round(UnitConverter.ConvertPixelsToUnit(_imageState.SourceHeightPx, unit)));
-                    int widthOutputDisplay = Math.Max(1, (int)Math.Round(UnitConverter.ConvertPixelsToUnit(outputW, unit)));
-                    int heightOutputDisplay = Math.Max(1, (int)Math.Round(UnitConverter.ConvertPixelsToUnit(outputH, unit)));
-
-                    _widthSourceBox.Text = widthSourceDisplay.ToString();
-                    _heightSourceBox.Text = heightSourceDisplay.ToString();
-
-                    if (skipBox != _widthBox) _widthBox.Value = widthOutputDisplay;
-                    if (skipBox != _heightBox) _heightBox.Value = heightOutputDisplay;
-
-                    if (skipBox != _marginLeftBox)
-                        _marginLeftBox.Value = Math.Min(
-                            (int)Math.Round(UnitConverter.ConvertPixelsToUnit(marginL, unit)),
-                            Math.Max(0, widthSourceDisplay - widthOutputDisplay));
-
-                    if (skipBox != _marginTopBox)
-                        _marginTopBox.Value = Math.Min(
-                            (int)Math.Round(UnitConverter.ConvertPixelsToUnit(marginT, unit)),
-                            Math.Max(0, heightSourceDisplay - heightOutputDisplay));
+                    _isSyncingUI = false;
+                    _onCropOverlayUpdateNeeded?.Invoke();
                 }
-            }
-            finally
-            {
-                _isSyncingUI = false;
-                _onCropOverlayUpdateNeeded?.Invoke();
-            }
+            });
         }
         #endregion
 
