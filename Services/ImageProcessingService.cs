@@ -17,36 +17,71 @@ namespace BulkCropAndResizeTool.Services
             try
             {
                 int orientation = 1;
+                BitmapSource source = null!;
 
-                using (var fs = new FileStream(
-                           filePath,
-                           FileMode.Open,
-                           FileAccess.Read,
-                           FileShare.ReadWrite))
-                using (var img = System.Drawing.Image.FromStream(fs, false, false))
+                // Prefer WPF BitmapMetadata when available (avoid System.Drawing dependency).
+                try
                 {
-                    var prop = img.PropertyItems.FirstOrDefault(p => p.Id == 0x0112);
-                    if (prop != null && prop.Value?.Length >= 2)
-                        orientation = BitConverter.ToUInt16(prop.Value, 0);
+                    using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                    {
+                        var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+                        if (decoder.Frames.Count > 0)
+                        {
+                            var frame = decoder.Frames[0];
+                            source = frame;
+
+                            if (frame.Metadata is BitmapMetadata metadata)
+                            {
+                                try
+                                {
+                                    // EXIF orientation tag
+                                    const string query = "/app1/ifd/{ushort=274}";
+                                    if (metadata.ContainsQuery(query))
+                                    {
+                                        var o = metadata.GetQuery(query);
+                                        if (o != null)
+                                        {
+                                            orientation = Convert.ToInt32(o);
+                                        }
+                                    }
+                                }
+                                catch
+                                {
+                                    // ignore metadata parse errors
+                                }
+                            }
+                        }
+                    }
                 }
-
-                BitmapImage bitmap;
-
-                using (var stream = new FileStream(
-                           filePath,
-                           FileMode.Open,
-                           FileAccess.Read,
-                           FileShare.ReadWrite))
+                catch
                 {
-                    bitmap = new BitmapImage();
-                    bitmap.BeginInit();
-                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                    bitmap.StreamSource = stream;
-                    bitmap.EndInit();
-                    bitmap.Freeze();
-                }
+                    // Fallback to System.Drawing-based EXIF read if metadata path fails
+                    try
+                    {
+                        using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                        using (var img = System.Drawing.Image.FromStream(fs, false, false))
+                        {
+                            var prop = img.PropertyItems.FirstOrDefault(p => p.Id == 0x0112);
+                            if (prop != null && prop.Value?.Length >= 2)
+                                orientation = BitConverter.ToUInt16(prop.Value, 0);
+                        }
 
-                BitmapSource source = bitmap;
+                        var bitmap = new BitmapImage();
+                        using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                        {
+                            bitmap.BeginInit();
+                            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                            bitmap.StreamSource = stream;
+                            bitmap.EndInit();
+                            bitmap.Freeze();
+                        }
+                        source = bitmap;
+                    }
+                    catch
+                    {
+                        throw;
+                    }
+                }
 
                 double w = source.PixelWidth;
                 double h = source.PixelHeight;
