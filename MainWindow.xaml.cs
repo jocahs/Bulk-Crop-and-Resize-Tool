@@ -19,6 +19,9 @@ namespace BulkCropAndResizeTool
 {
     public partial class MainWindow : Window
     {
+        // Helper: null-safe visibility check (useful when UI tree changes or control can be null)
+        private bool IsElementVisible(UIElement? el) => el != null && el.Visibility == Visibility.Visible;
+
         #region Fields
 
         private readonly ImageState _imageState = new();
@@ -212,6 +215,11 @@ namespace BulkCropAndResizeTool
         }
         private void UpdateDisplayedImage()
         {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.Invoke(() => UpdateDisplayedImage());
+                return;
+            }
             if (_imageState.OriginalImage == null) return;
 
             int oldW = _imageState.SourceWidthPx;
@@ -241,7 +249,7 @@ namespace BulkCropAndResizeTool
             PreviewImage.Height = h;
             _viewportController.UpdateTransform();
 
-            // Apply rotation to image
+            // Apply rotation to image — assign Source on UI thread
             var display = ImageProcessingService.RotateImage(_imageState.OriginalImage, _imageState.CurrentRotation);
             PreviewImage.Source = display ?? _imageState.OriginalImage;
         }
@@ -257,9 +265,14 @@ namespace BulkCropAndResizeTool
         #region Crop Overlay
         private void UpdateCropOverlay()
         {
-            if (_imageState.OriginalImage == null || _imageState.SourceWidthPx <= 0)
+            if (!Dispatcher.CheckAccess())
             {
-                CropOverlay.Visibility = Visibility.Hidden;
+                Dispatcher.Invoke(() => UpdateCropOverlay());
+                return;
+            }
+            if (_imageState.OriginalImage == null || _imageState.SourceWidthPx <= 0 || CropOverlay == null)
+            {
+                if (CropOverlay != null) CropOverlay.Visibility = Visibility.Hidden;
                 return;
             }
 
@@ -798,7 +811,7 @@ namespace BulkCropAndResizeTool
         }
         private void PreviewCanvas_MouseMove(object sender, MouseEventArgs e)
         {
-            if (_imageState.OriginalImage == null || CropOverlay.Visibility != Visibility.Visible || _imageState.IsResizeMode)
+            if (_imageState.OriginalImage == null || !IsElementVisible(CropOverlay) || _imageState.IsResizeMode)
             {
                 Cursor = Cursors.Arrow;
                 return;
