@@ -2,7 +2,6 @@
 using System;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 
 namespace BulkCropAndResizeTool.Controls
 {
@@ -17,7 +16,6 @@ namespace BulkCropAndResizeTool.Controls
         private int _startMarginLeftPx, _startMarginTopPx, _startWidthPx, _startHeightPx;
 
         public bool IsManipulating => _isManipulating;
-
         public void StartManipulation(Point mousePos, string mode)
         {
             _isManipulating = true;
@@ -29,7 +27,6 @@ namespace BulkCropAndResizeTool.Controls
             _startHeightPx = _imageState.OutputHeightPx;
             _overlay.CaptureMouse();
         }
-
         public void UpdateManipulation(Point currentPos, Action refreshUI)
         {
             if (_viewportState.IsPanMode) return;
@@ -136,7 +133,6 @@ namespace BulkCropAndResizeTool.Controls
 
             refreshUI?.Invoke();
         }
-
         public void EndManipulation()
         {
             _isManipulating = false;

@@ -8,50 +8,30 @@ using BulkCropAndResizeTool.Models;
 
 namespace BulkCropAndResizeTool.Controls
 {
-    /// <summary>
-    /// Owns all zoom, pan, and scroll-bar logic for the image preview.
-    /// MainWindow forwards the relevant XAML events here and stays out of the geometry.
-    /// </summary>
-    public class ViewportController
+    public class ViewportController(
+        Canvas previewCanvas,
+        Image previewImage,
+        Border cropOverlay,
+        ScrollBar hScrollBar,
+        ScrollBar vScrollBar,
+        Label zoomLabel,
+        Button panModeBtn,
+        ImageState imageState,
+        ViewportState viewportState,
+        Action onTransformUpdated)
     {
-        private readonly Canvas _previewCanvas;
-        private readonly Image _previewImage;
-        private readonly Border _cropOverlay;
-        private readonly ScrollBar _hScrollBar;
-        private readonly ScrollBar _vScrollBar;
-        private readonly Label _zoomLabel;
-        private readonly Button _panModeBtn;
-        private readonly ImageState _imageState;
-        private readonly ViewportState _viewportState;
-        private readonly Action _onTransformUpdated;
+        private readonly Canvas _previewCanvas = previewCanvas;
+        private readonly Image _previewImage = previewImage;
+        private readonly Border _cropOverlay = cropOverlay;
+        private readonly ScrollBar _hScrollBar = hScrollBar;
+        private readonly ScrollBar _vScrollBar = vScrollBar;
+        private readonly Label _zoomLabel = zoomLabel;
+        private readonly Button _panModeBtn = panModeBtn;
+        private readonly ImageState _imageState = imageState;
+        private readonly ViewportState _viewportState = viewportState;
+        private readonly Action _onTransformUpdated = onTransformUpdated;
 
         private bool _isSyncingScrollBars;
-
-        public ViewportController(
-            Canvas previewCanvas,
-            Image previewImage,
-            Border cropOverlay,
-            ScrollBar hScrollBar,
-            ScrollBar vScrollBar,
-            Label zoomLabel,
-            Button panModeBtn,
-            ImageState imageState,
-            ViewportState viewportState,
-            Action onTransformUpdated)
-        {
-            _previewCanvas = previewCanvas;
-            _previewImage = previewImage;
-            _cropOverlay = cropOverlay;
-            _hScrollBar = hScrollBar;
-            _vScrollBar = vScrollBar;
-            _zoomLabel = zoomLabel;
-            _panModeBtn = panModeBtn;
-            _imageState = imageState;
-            _viewportState = viewportState;
-            _onTransformUpdated = onTransformUpdated;
-        }
-
-        /// <summary>True while scroll bar values are being set programmatically (suppresses feedback loops).</summary>
         public bool IsSyncingScrollBars => _isSyncingScrollBars;
 
         #region Transform

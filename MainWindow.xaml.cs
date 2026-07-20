@@ -5,20 +5,13 @@ using BulkCropAndResizeTool.Models;
 using BulkCropAndResizeTool.Services;
 using Microsoft.Win32;
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
-using Xceed.Wpf.Toolkit;
-using static System.Net.WebRequestMethods;
 
 namespace BulkCropAndResizeTool
 {
@@ -28,10 +21,8 @@ namespace BulkCropAndResizeTool
 
         private readonly ImageState _imageState = new();
         private readonly ViewportState _viewportState = new();
-        private readonly ImageProcessingService _imageService;
         private readonly FileService _fileService;
         private readonly LoggingService _logger;
-        private readonly IFilenameService _filenameService;
         private readonly BatchProcessor _batchProcessor;
         private readonly CropOverlayController _cropController;
         private readonly ViewportController _viewportController;
@@ -50,11 +41,9 @@ namespace BulkCropAndResizeTool
         public MainWindow()
         {
             InitializeComponent();
-            _imageService = new ImageProcessingService();
             _fileService = new FileService();
             _logger = new LoggingService(LogTextBox, AppendLog);
-            _filenameService = new FilenameService();
-            _batchProcessor = new BatchProcessor(_imageService, _logger);
+            _batchProcessor = new BatchProcessor(_logger);
             _cropController = new CropOverlayController(CropOverlay, _imageState, _viewportState);
             _viewportController = new ViewportController(
                 PreviewCanvas, PreviewImage, CropOverlay, HScrollBar, VScrollBar, ZoomLabel, PanModeBtn,
@@ -177,7 +166,7 @@ namespace BulkCropAndResizeTool
                 double previousWidthDisplay = WidthBox.Value ?? 0;
                 double previousHeightDisplay = HeightBox.Value ?? 0;
 
-                var image = _imageService.LoadImageFromFile(filePath) ?? throw new Exception("Failed to load image.");
+                var image = ImageProcessingService.LoadImageFromFile(filePath) ?? throw new Exception("Failed to load image.");
                 _imageState.OriginalImage = image;
                 _imageState.CurrentRotation = 0;
                 _imageState.PreviousRotation = 0;
@@ -268,7 +257,7 @@ namespace BulkCropAndResizeTool
             _viewportController.UpdateTransform();
 
             // Apply rotation to image
-            var display = _imageService.RotateImage(_imageState.OriginalImage, _imageState.CurrentRotation);
+            var display = ImageProcessingService.RotateImage(_imageState.OriginalImage, _imageState.CurrentRotation);
             PreviewImage.Source = display ?? _imageState.OriginalImage;
         }
         private void RotateImage(double degrees)
@@ -488,7 +477,7 @@ namespace BulkCropAndResizeTool
             bool isResize = ModeResize.IsChecked == true;
             string unit = _dimensionsController.GetCurrentUnit();
 
-            var processedImage = _imageService.ProcessImage(
+            var processedImage = ImageProcessingService.ProcessImage(
                 _imageState.OriginalImage!,
                 isResize,
                 unit,
@@ -546,7 +535,7 @@ namespace BulkCropAndResizeTool
 
             try
             {
-                _imageService.SaveImage(processedImage, savePath, ext);
+                ImageProcessingService.SaveImage(processedImage, savePath, ext);
                 _logger.Log($"Image saved to: {savePath}");
 
                 if (OpenAfterChk.IsChecked == true)

@@ -32,9 +32,8 @@ namespace BulkCropAndResizeTool.Services
             Func<string, string, bool> shouldSkipFile,
             CancellationToken cancellationToken = default);
     }
-    public class BatchProcessor(ImageProcessingService imageService, LoggingService logger) : IBatchProcessor
+    public class BatchProcessor(LoggingService logger) : IBatchProcessor
     {
-        private readonly ImageProcessingService _imageService = imageService;
         private readonly LoggingService _logger = logger;
 
         public async Task ProcessBatchAsync(
@@ -61,7 +60,7 @@ namespace BulkCropAndResizeTool.Services
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    var image = _imageService.LoadImageFromFile(filePath);
+                    var image = ImageProcessingService.LoadImageFromFile(filePath);
                     if (image == null)
                     {
                         logAction?.Invoke($"Failed to load: {System.IO.Path.GetFileName(filePath)}");
@@ -70,7 +69,7 @@ namespace BulkCropAndResizeTool.Services
                         continue;
                     }
 
-                    var processedImage = _imageService.ProcessImage(
+                    var processedImage = ImageProcessingService.ProcessImage(
                         image, isResize, unit, angle, outputWidth, outputHeight,
                         marginLeft, marginTop, percentW, percentH);
 
@@ -95,7 +94,7 @@ namespace BulkCropAndResizeTool.Services
 
                     try
                     {
-                        _imageService.SaveImage(processedImage, savePath, ext);
+                        ImageProcessingService.SaveImage(processedImage, savePath, ext);
                         logAction?.Invoke($"Saved: {saveFileName}");
                     }
                     catch (Exception ex)
