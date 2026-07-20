@@ -13,6 +13,7 @@ namespace BulkCropAndResizeTool.Services
     {
         public static BitmapSource LoadImageFromFile(string filePath)
         {
+            ArgumentNullException.ThrowIfNull(filePath);
             try
             {
                 int orientation = 1;
@@ -197,7 +198,8 @@ namespace BulkCropAndResizeTool.Services
         }
         private static BitmapEncoder CreateEncoder(string format, int quality)
         {
-            return format.ToLower() switch
+            var fmt = (format ?? ".jpg").ToLower();
+            return fmt switch
             {
                 ".png" => new PngBitmapEncoder(),
                 ".bmp" => new BmpBitmapEncoder(),
