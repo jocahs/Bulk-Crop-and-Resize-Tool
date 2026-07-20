@@ -94,30 +94,29 @@ namespace BulkCropAndResizeTool.Controls
 
         #region Refresh / Sync
 
-       private void ClampCropRectangle()
-       {
-            
-            _imageState.OutputWidthPx =
-                Math.Min(
-                    Math.Max(1, _imageState.OutputWidthPx),
-                    _imageState.SourceWidthPx);
+        private void ClampCropRectangle()
+        {
+            _imageState.OutputWidthPx = Math.Max(1, _imageState.OutputWidthPx);
+            _imageState.OutputHeightPx = Math.Max(1, _imageState.OutputHeightPx);
 
-            _imageState.OutputHeightPx =
-                Math.Min(
-                    Math.Max(1, _imageState.OutputHeightPx),
-                    _imageState.SourceHeightPx);
+            _imageState.MarginLeftPx = Math.Max(0, _imageState.MarginLeftPx);
+            _imageState.MarginTopPx = Math.Max(0, _imageState.MarginTopPx);
 
-            _imageState.MarginLeftPx =
-                Math.Min(
-                    Math.Max(0, _imageState.MarginLeftPx),
-                    _imageState.SourceWidthPx - 1);
+            if (_imageState.IsCropMode)
+            {
+                _imageState.OutputWidthPx = Math.Min(_imageState.OutputWidthPx, _imageState.SourceWidthPx);
+                _imageState.OutputHeightPx = Math.Min(_imageState.OutputHeightPx, _imageState.SourceHeightPx);
 
-            _imageState.MarginTopPx =
-                Math.Min(
-                    Math.Max(0, _imageState.MarginTopPx),
-                    _imageState.SourceHeightPx - 1);
+                _imageState.MarginLeftPx = Math.Min(_imageState.MarginLeftPx, _imageState.SourceWidthPx - 1);
+                _imageState.MarginTopPx = Math.Min(_imageState.MarginTopPx, _imageState.SourceHeightPx - 1);
+
+                if (_imageState.MarginLeftPx + _imageState.OutputWidthPx > _imageState.SourceWidthPx)
+                    _imageState.OutputWidthPx = _imageState.SourceWidthPx - _imageState.MarginLeftPx;
+
+                if (_imageState.MarginTopPx + _imageState.OutputHeightPx > _imageState.SourceHeightPx)
+                    _imageState.OutputHeightPx = _imageState.SourceHeightPx - _imageState.MarginTopPx;
+            }
         }
-
         #endregion
 
         #region Aspect Ratio
@@ -139,9 +138,8 @@ namespace BulkCropAndResizeTool.Controls
 
             _imageState.OutputWidthPx = w;
             _imageState.OutputHeightPx = h;
-            UpdateDimensionTextBoxes();
+            RefreshUI();
         }
-
 
         #endregion
 
@@ -161,24 +159,30 @@ namespace BulkCropAndResizeTool.Controls
             {
                 string unit = GetCurrentUnit();
 
+                int outputW = _imageState.PreviewOutputWidthPx ?? _imageState.OutputWidthPx;
+                int outputH = _imageState.PreviewOutputHeightPx ?? _imageState.OutputHeightPx;
+                int marginL = _imageState.PreviewMarginLeftPx ?? _imageState.MarginLeftPx;
+                int marginT = _imageState.PreviewMarginTopPx ?? _imageState.MarginTopPx;
+
                 if (unit == "%")
                 {
                     _widthSourceBox.Text = "100";
                     _heightSourceBox.Text = "100";
 
-                    double percentW = (double)_imageState.OutputWidthPx / _imageState.SourceWidthPx * 100;
-                    double percentH = (double)_imageState.OutputHeightPx / _imageState.SourceHeightPx * 100;
+                    double percentW = (double)outputW / _imageState.SourceWidthPx * 100;
+                    double percentH = (double)outputH / _imageState.SourceHeightPx * 100;
+
                     if (skipBox != _widthBox) _widthBox.Value = (int)Math.Round(Math.Max(1, percentW));
                     if (skipBox != _heightBox) _heightBox.Value = (int)Math.Round(Math.Max(1, percentH));
                     if (skipBox != _marginLeftBox) _marginLeftBox.Value = 0;
                     if (skipBox != _marginTopBox) _marginTopBox.Value = 0;
                 }
                 else
-                {              
+                {
                     int widthSourceDisplay = Math.Max(1, (int)Math.Round(UnitConverter.ConvertPixelsToUnit(_imageState.SourceWidthPx, unit)));
                     int heightSourceDisplay = Math.Max(1, (int)Math.Round(UnitConverter.ConvertPixelsToUnit(_imageState.SourceHeightPx, unit)));
-                    int widthOutputDisplay = Math.Max(1, (int)Math.Round(UnitConverter.ConvertPixelsToUnit(_imageState.OutputWidthPx, unit)));
-                    int heightOutputDisplay = Math.Max(1, (int)Math.Round(UnitConverter.ConvertPixelsToUnit(_imageState.OutputHeightPx, unit)));
+                    int widthOutputDisplay = Math.Max(1, (int)Math.Round(UnitConverter.ConvertPixelsToUnit(outputW, unit)));
+                    int heightOutputDisplay = Math.Max(1, (int)Math.Round(UnitConverter.ConvertPixelsToUnit(outputH, unit)));
 
                     _widthSourceBox.Text = widthSourceDisplay.ToString();
                     _heightSourceBox.Text = heightSourceDisplay.ToString();
@@ -187,22 +191,14 @@ namespace BulkCropAndResizeTool.Controls
                     if (skipBox != _heightBox) _heightBox.Value = heightOutputDisplay;
 
                     if (skipBox != _marginLeftBox)
-                    {
-                        _marginLeftBox.Value =
-                            (int)Math.Round(
-                                UnitConverter.ConvertPixelsToUnit(
-                                    _imageState.MarginLeftPx,
-                                    unit));
-                    }
+                        _marginLeftBox.Value = Math.Min(
+                            (int)Math.Round(UnitConverter.ConvertPixelsToUnit(marginL, unit)),
+                            Math.Max(0, widthSourceDisplay - widthOutputDisplay));
 
                     if (skipBox != _marginTopBox)
-                    {
-                        _marginTopBox.Value =
-                            (int)Math.Round(
-                                UnitConverter.ConvertPixelsToUnit(
-                                    _imageState.MarginTopPx,
-                                    unit));
-                    }
+                        _marginTopBox.Value = Math.Min(
+                            (int)Math.Round(UnitConverter.ConvertPixelsToUnit(marginT, unit)),
+                            Math.Max(0, heightSourceDisplay - heightOutputDisplay));
                 }
             }
             finally
@@ -211,7 +207,6 @@ namespace BulkCropAndResizeTool.Controls
                 _onCropOverlayUpdateNeeded?.Invoke();
             }
         }
-        
         #endregion
 
         #region Preview-Commit Pattern
@@ -282,7 +277,7 @@ namespace BulkCropAndResizeTool.Controls
             _imageState.PreviewMarginTopPx = previewMarginTop;
 
             // Refresh UI showing preview values
-            RefreshUIWithPreviews(skipBox: _activeOutputBox);
+            UpdateDimensionTextBoxes(skipBox: _activeOutputBox);
             _onCropOverlayUpdateNeeded?.Invoke();
         }
 
@@ -339,7 +334,7 @@ namespace BulkCropAndResizeTool.Controls
             _imageState.PreviewOutputWidthPx = previewOutputW;
             _imageState.PreviewOutputHeightPx = previewOutputH;
 
-            RefreshUIWithPreviews(skipBox: _activeMarginBox);
+            UpdateDimensionTextBoxes(skipBox: _activeMarginBox);
             _onCropOverlayUpdateNeeded?.Invoke();
         }
 
@@ -389,70 +384,6 @@ namespace BulkCropAndResizeTool.Controls
             _activeMarginBox = null;
 
             RefreshUI();
-        }
-
-        #endregion
-
-        #region UI Refresh with Previews
-
-        private void RefreshUIWithPreviews(IntegerUpDown? skipBox = null)
-        {
-            if (_isSyncingUI) return;
-            _isSyncingUI = true;
-
-            try
-            {
-                string unit = GetCurrentUnit();
-
-                // Use preview values if available, else committed
-                int outputW = _imageState.PreviewOutputWidthPx ?? _imageState.OutputWidthPx;
-                int outputH = _imageState.PreviewOutputHeightPx ?? _imageState.OutputHeightPx;
-                int marginL = _imageState.PreviewMarginLeftPx ?? _imageState.MarginLeftPx;
-                int marginT = _imageState.PreviewMarginTopPx ?? _imageState.MarginTopPx;
-
-                if (unit == "%")
-                {
-                    _widthSourceBox.Text = "100";
-                    _heightSourceBox.Text = "100";
-
-                    double percentW = (double)outputW / _imageState.SourceWidthPx * 100;
-                    double percentH = (double)outputH / _imageState.SourceHeightPx * 100;
-
-                    if (skipBox != _widthBox) _widthBox.Value = (int)Math.Round(Math.Max(1, percentW));
-                    if (skipBox != _heightBox) _heightBox.Value = (int)Math.Round(Math.Max(1, percentH));
-                    if (skipBox != _marginLeftBox) _marginLeftBox.Value = 0;
-                    if (skipBox != _marginTopBox) _marginTopBox.Value = 0;
-                }
-                else
-                {
-                    int widthSourceDisplay = Math.Max(1, (int)Math.Round(
-                        UnitConverter.ConvertPixelsToUnit(_imageState.SourceWidthPx, unit)));
-                    int heightSourceDisplay = Math.Max(1, (int)Math.Round(
-                        UnitConverter.ConvertPixelsToUnit(_imageState.SourceHeightPx, unit)));
-                    int widthOutputDisplay = Math.Max(1, (int)Math.Round(
-                        UnitConverter.ConvertPixelsToUnit(outputW, unit)));
-                    int heightOutputDisplay = Math.Max(1, (int)Math.Round(
-                        UnitConverter.ConvertPixelsToUnit(outputH, unit)));
-
-                    _widthSourceBox.Text = widthSourceDisplay.ToString();
-                    _heightSourceBox.Text = heightSourceDisplay.ToString();
-
-                    if (skipBox != _widthBox) _widthBox.Value = widthOutputDisplay;
-                    if (skipBox != _heightBox) _heightBox.Value = heightOutputDisplay;
-
-                    if (skipBox != _marginLeftBox)
-                        _marginLeftBox.Value = (int)Math.Round(
-                            UnitConverter.ConvertPixelsToUnit(marginL, unit));
-                    if (skipBox != _marginTopBox)
-                        _marginTopBox.Value = (int)Math.Round(
-                            UnitConverter.ConvertPixelsToUnit(marginT, unit));
-                }
-            }
-            finally
-            {
-                _isSyncingUI = false;
-                _onCropOverlayUpdateNeeded?.Invoke();
-            }
         }
 
         #endregion

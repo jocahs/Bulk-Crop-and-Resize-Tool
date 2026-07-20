@@ -47,6 +47,7 @@ namespace BulkCropAndResizeTool.Models
             MarginTopPx = 0;
             CurrentRotation = 0;
             PreviousRotation = 0;
+            ClearPreviews();
         }
 
         public void SetSourceDimensions(int width, int height)

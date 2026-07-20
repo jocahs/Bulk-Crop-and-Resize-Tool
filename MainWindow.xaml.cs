@@ -557,37 +557,6 @@ namespace BulkCropAndResizeTool
                 _logger.Log($"Processing failed: {ex.Message}");
             }
         }
-        private bool ShouldSkipFile(string saveFileName, string savePath)
-        {
-            if (OverwriteChk.IsChecked == false && System.IO.File.Exists(savePath))
-            {
-                if (_batchAction.HasValue)
-                    return _batchAction.Value == OverwriteAction.SkipAll;
-
-                var dialog = new OverwritePromptDialog { Owner = this };
-                bool? result = dialog.ShowDialog();
-                if (result == true)
-                {
-                    var action = dialog.Result;
-                    if (action == OverwriteAction.Skip) return true;
-                    if (action == OverwriteAction.SkipAll)
-                    {
-                        _batchAction = OverwriteAction.SkipAll;
-                        return true;
-                    }
-                    if (action == OverwriteAction.OverwriteAll)
-                    {
-                        _batchAction = OverwriteAction.OverwriteAll;
-                    }
-                }
-                else
-                {
-                    _logger.Log($"Skipped: {saveFileName}");
-                    return true;
-                }
-            }
-            return false;
-        }
         private async Task ProcessBatchAsync(string folderPath, string outputFolder)
         {
             var files = _fileService.GetImageFiles(folderPath);
@@ -649,8 +618,40 @@ namespace BulkCropAndResizeTool
                 _cancellationTokenSource?.Dispose();
                 _cancellationTokenSource = null;
             }
-        }
+        }        
+        private bool ShouldSkipFile(string saveFileName, string savePath)
+        {
+            if (!Dispatcher.CheckAccess())
+                return Dispatcher.Invoke(() => ShouldSkipFile(saveFileName, savePath));
+            if (OverwriteChk.IsChecked == false && System.IO.File.Exists(savePath))
+            {
+                if (_batchAction.HasValue)
+                    return _batchAction.Value == OverwriteAction.SkipAll;
 
+                var dialog = new OverwritePromptDialog { Owner = this };
+                bool? result = dialog.ShowDialog();
+                if (result == true)
+                {
+                    var action = dialog.Result;
+                    if (action == OverwriteAction.Skip) return true;
+                    if (action == OverwriteAction.SkipAll)
+                    {
+                        _batchAction = OverwriteAction.SkipAll;
+                        return true;
+                    }
+                    if (action == OverwriteAction.OverwriteAll)
+                    {
+                        _batchAction = OverwriteAction.OverwriteAll;
+                    }
+                }
+                else
+                {
+                    _logger.Log($"Skipped: {saveFileName}");
+                    return true;
+                }
+            }
+            return false;
+        }
         private void CancelBtn_Click(object sender, RoutedEventArgs e)
         {
             _cancellationTokenSource?.Cancel();
@@ -720,7 +721,16 @@ namespace BulkCropAndResizeTool
         #endregion
 
         #region Logging (delegated to service)
-        private void AppendLog(string text) => LogTextBox.AppendText(text + "\n");
+        private void AppendLog(string text)
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.Invoke(() => AppendLog(text));
+                return;
+            }
+            LogTextBox.AppendText(text + "\n");
+        }
+        
         #endregion
 
         #region Zoom Event Handlers
@@ -1020,6 +1030,7 @@ namespace BulkCropAndResizeTool
             {
                 SrcBox.Text = dialog.FileName;
                 _lastValidSourcePath = dialog.FileName;
+                OutputLabel.Content = "Output";
                 LoadPath(dialog.FileName);
             }
         }
