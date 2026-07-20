@@ -537,7 +537,7 @@ namespace BulkCropAndResizeTool
                 _logger.Log($"Image saved to: {savePath}");
 
                 if (OpenAfterChk.IsChecked == true)
-                    Process.Start("explorer.exe", outputFolder);
+                    UIHelpers.OpenFolder(outputFolder);
             }
             catch (Exception ex)
             {
@@ -593,7 +593,7 @@ namespace BulkCropAndResizeTool
                     _cancellationTokenSource.Token);
 
                 if (OpenAfterChk.IsChecked == true)
-                    Process.Start("explorer.exe", outputFolder);
+                    UIHelpers.OpenFolder(outputFolder);
             }
             catch (OperationCanceledException)
             {

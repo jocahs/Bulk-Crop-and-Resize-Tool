@@ -13,6 +13,33 @@ namespace BulkCropAndResizeTool.Helpers
                 return defaultResult;
             }
 
+        public static void OpenFolder(string folderPath)
+        {
+            if (string.IsNullOrWhiteSpace(folderPath)) return;
+
+            var app = Application.Current;
+            if (app != null && !app.Dispatcher.CheckAccess())
+            {
+                app.Dispatcher.Invoke(() => OpenFolder(folderPath));
+                return;
+            }
+
+            try
+            {
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = folderPath,
+                    UseShellExecute = true,
+                    Verb = "open"
+                };
+                System.Diagnostics.Process.Start(psi);
+            }
+            catch
+            {
+                // best-effort; swallow exceptions and return
+            }
+        }
+
             if (app.Dispatcher.CheckAccess())
             {
                 return MessageBox.Show(messageBoxText, caption, button, icon, defaultResult);
