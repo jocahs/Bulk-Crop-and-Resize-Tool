@@ -4,11 +4,11 @@ public static class AppConstants
 {
     #region Default Text
 
-        public const string DefaultSrcBoxText = "Write/Paste or Browse the source path of a file/folder ----->";
-        public const string DefaultDstBoxText = "Write/Paste or Browse if different from Source folder ------>";
+    public const string DefaultSrcBoxText = "Write/Paste or Browse the source path of a file/folder ----->";
+    public const string DefaultDstBoxText = "Write/Paste or Browse if different from Source folder ------>";
 
-        public const string DefaultFilename = "filename";
-        public const string DefaultExtension = ".jpg";
+    public const string DefaultFilename = "filename";
+    public const string DefaultExtension = ".jpg";
 
     #endregion
 

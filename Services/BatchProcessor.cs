@@ -1,12 +1,7 @@
-﻿using BulkCropAndResizeTool.Helpers;
-using BulkCropAndResizeTool.Models;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows;
 
 namespace BulkCropAndResizeTool.Services
 {
@@ -81,7 +76,7 @@ namespace BulkCropAndResizeTool.Services
                         continue;
                     }
 
-                    var (saveFileName, savePath, ext) = FilenameGenerator.GetOutputFileInfo(
+                    var (saveFileName, savePath, ext) = FileService.GetOutputFileInfo(
                         filePath, outputFolder, prefixText ?? "", overwrite, isPrefixMode);
 
                     if (shouldSkipFile?.Invoke(saveFileName, savePath) == true)

@@ -114,7 +114,7 @@ namespace BulkCropAndResizeTool
             OverwriteChk.Unchecked += (s, e) => UpdateFilenameAvailability();
 
             // Image interactions
-            PreviewImage.MouseDown += PreviewImage_MouseDown;   
+            PreviewImage.MouseDown += PreviewImage_MouseDown;
             PreviewImage.MouseMove += PreviewImage_MouseMove;
             PreviewImage.MouseUp += PreviewImage_MouseUp;
             PreviewImage.SizeChanged += (s, e) => UpdateCropOverlay();
@@ -306,7 +306,7 @@ namespace BulkCropAndResizeTool
         #endregion
 
         #region Filename Management
-        
+
         private string? _lastAppliedDefaultText = null; // add near the existing _userCustomText field
         private void UpdateFilenameUI()
         {
@@ -607,7 +607,7 @@ namespace BulkCropAndResizeTool
                 _cancellationTokenSource?.Dispose();
                 _cancellationTokenSource = null;
             }
-        }        
+        }
         private bool ShouldSkipFile(string saveFileName, string savePath)
         {
             if (!Dispatcher.CheckAccess())
@@ -670,7 +670,7 @@ namespace BulkCropAndResizeTool
         {
             _imageState.Reset();
             _viewportState.Reset();
-            
+
             AspectRatio.IsChecked = false;
             ModeCrop.IsChecked = true;
             UnitPixels.IsChecked = true;
@@ -719,7 +719,7 @@ namespace BulkCropAndResizeTool
             }
             LogTextBox.AppendText(text + "\n");
         }
-        
+
         #endregion
 
         #region Zoom Event Handlers
@@ -925,7 +925,7 @@ namespace BulkCropAndResizeTool
                 }
             }
         }
-        
+
         #endregion
 
         #region Aspect Ratio Event Handler

@@ -35,7 +35,6 @@ namespace BulkCropAndResizeTool.Models
         public double CurrentRotation { get; set; }
         public double PreviousRotation { get; set; }
 
-        public bool IsImageLoaded => OriginalImage != null;
         public bool IsCropMode { get; set; } = true;
         public bool IsResizeMode => !IsCropMode;
 

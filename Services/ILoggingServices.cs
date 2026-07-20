@@ -8,8 +8,6 @@ namespace BulkCropAndResizeTool.Services
         void Log(string message);
         void Clear();
     }
-
-    // Primary constructor - parameters become capture variables
     public class LoggingService(TextBox logTextBox, Action<string> appendAction) : ILoggingServices
     {
         public void Log(string message)

@@ -1,5 +1,4 @@
-﻿using System.Windows;  // ← Add this for Point
-using System.Windows.Media; // ← Add this if you use other WPF types
+﻿using System.Windows;
 
 namespace BulkCropAndResizeTool.Models
 {
@@ -23,7 +22,7 @@ namespace BulkCropAndResizeTool.Models
         public double MaxPanY { get; set; } = 0;
         public bool IsPanMode { get; set; } = false;
         public bool IsPanning { get; set; } = false;
-        public Point PanStartMouse { get; set; }  // ← Now works with using System.Windows;
+        public Point PanStartMouse { get; set; }
         public double PanStartX { get; set; }
         public double PanStartY { get; set; }
 
