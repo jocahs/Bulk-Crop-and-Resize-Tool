@@ -189,6 +189,7 @@ namespace BulkCropAndResizeTool.Services
         public static void SaveImage (BitmapSource image, string filePath, string format = ".jpg", int quality = 90)
         {
             ArgumentNullException.ThrowIfNull(image);
+            ArgumentNullException.ThrowIfNull(filePath);
 
             BitmapEncoder encoder = CreateEncoder(format, quality);
             encoder.Frames.Add(BitmapFrame.Create(image));
