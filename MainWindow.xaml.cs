@@ -500,7 +500,7 @@ namespace BulkCropAndResizeTool
 
             if (System.IO.File.Exists(savePath) && OverwriteChk.IsChecked == false)
             {
-                var res = MessageBox.Show($"File already exists:\n{savePath}\nOverwrite?",
+                var res = UIHelpers.ShowMessage($"File already exists:\n{savePath}\nOverwrite?",
                                          "Overwrite?",
                                          MessageBoxButton.YesNo,
                                          MessageBoxImage.Warning,
@@ -673,7 +673,7 @@ namespace BulkCropAndResizeTool
 
         private void ResetAll_Click(object sender, RoutedEventArgs e)
         {
-            var result = MessageBox.Show(
+            var result = UIHelpers.ShowMessage(
                 "This will clear the loaded image and reset all settings to their defaults. Continue?",
                 "Reset Everything",
                 MessageBoxButton.YesNo,
@@ -894,7 +894,7 @@ namespace BulkCropAndResizeTool
             var text = PreSufBox.Text ?? string.Empty;
             if (string.IsNullOrEmpty(text))
             {
-                var result = MessageBox.Show(
+                var result = UIHelpers.ShowMessage(
                     "Prefix/Suffix additional name is empty. Overwrite?",
                     "Overwrite?",
                     MessageBoxButton.YesNo,
@@ -1106,7 +1106,7 @@ namespace BulkCropAndResizeTool
             var files = _fileService.GetImageFiles(selectedFolder);
             if (files.Count == 0)
             {
-                MessageBox.Show(
+                UIHelpers.ShowMessage(
                     "No image files found in the selected folder.",
                     "Invalid Folder",
                     MessageBoxButton.OK,
@@ -1182,7 +1182,7 @@ namespace BulkCropAndResizeTool
             }
             else
             {
-                MessageBox.Show(
+                UIHelpers.ShowMessage(
                     "The path is not valid. Please check for invalid characters, reserved names, or missing drive.",
                     "Invalid Path",
                     MessageBoxButton.OK,
@@ -1222,7 +1222,7 @@ namespace BulkCropAndResizeTool
             }
             else
             {
-                MessageBox.Show(
+                UIHelpers.ShowMessage(
                     "The entered path is not valid for a folder. Please check for invalid characters, reserved names, or missing drive.",
                     "Invalid Path",
                     MessageBoxButton.OK,
