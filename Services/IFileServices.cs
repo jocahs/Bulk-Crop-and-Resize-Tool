@@ -18,6 +18,7 @@ namespace BulkCropAndResizeTool.Services
     {
         public List<string> GetImageFiles(string folderPath)
         {
+            ArgumentNullException.ThrowIfNull(folderPath);
             var files = new List<string>();
             foreach (var ext in AppConstants.ImageExtensions)
                 files.AddRange(Directory.GetFiles(folderPath, ext, SearchOption.TopDirectoryOnly));
@@ -45,13 +46,11 @@ namespace BulkCropAndResizeTool.Services
 
                 if (!string.IsNullOrEmpty(directoryName))
                 {
-                    string[] reserved = ["CON", "PRN", "AUX", "NUL"];
+                    string[] reserved = new[] { "CON", "PRN", "AUX", "NUL" };
 
-                    // FIX: Use Any() with StringComparison
                     if (reserved.Any(r => string.Equals(r, directoryName, StringComparison.OrdinalIgnoreCase)))
                         return null;
 
-                    // Additional validation
                     if (directoryName.TrimEnd(' ', '.').Length != directoryName.Length)
                         return null;
                 }
@@ -75,6 +74,10 @@ namespace BulkCropAndResizeTool.Services
 
         public string GetUniqueFileName(string folderPath, string baseName, string extension)
         {
+            ArgumentNullException.ThrowIfNull(folderPath);
+            ArgumentNullException.ThrowIfNull(baseName);
+            ArgumentNullException.ThrowIfNull(extension);
+
             string fileName = baseName + extension;
             string fullPath = Path.Combine(folderPath, fileName);
             int count = 1;
@@ -90,13 +93,16 @@ namespace BulkCropAndResizeTool.Services
         }
         public static (string saveFileName, string savePath, string extension) GetOutputFileInfo(string filePath, string outputFolder, string preSufText, bool overwrite, bool usePrefix)
         {
+            ArgumentNullException.ThrowIfNull(filePath);
+            ArgumentNullException.ThrowIfNull(outputFolder);
+
             string originalName = System.IO.Path.GetFileName(filePath);
             string baseName = System.IO.Path.GetFileNameWithoutExtension(originalName);
             string ext = System.IO.Path.GetExtension(originalName);
             if (string.IsNullOrEmpty(ext)) ext = AppConstants.DefaultExtension;
 
             string finalBase;
-            string preSuf = preSufText.Trim();
+            string preSuf = (preSufText ?? string.Empty).Trim();
 
             if (overwrite)
             {
