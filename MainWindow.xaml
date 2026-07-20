@@ -335,7 +335,7 @@
 
                 <TextBox x:Name="LogTextBox" IsReadOnly="True" 
                          TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" 
-                         Background="LightGray" MaxHeight="250" Padding="2"/>
+                         Background="LightGray" MaxHeight="260" Padding="2"/>
             
         </StackPanel>
 

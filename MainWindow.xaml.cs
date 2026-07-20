@@ -284,11 +284,16 @@ namespace BulkCropAndResizeTool
                 return;
             }
 
-            Canvas.SetLeft(CropOverlay, _imageState.MarginLeftPx);
-            Canvas.SetTop(CropOverlay, _imageState.MarginTopPx);
-            CropOverlay.Width = Math.Max(1, _imageState.OutputWidthPx);
-            CropOverlay.Height = Math.Max(1, _imageState.OutputHeightPx);
-            CropOverlay.RenderTransform = null;
+            // Use preview values during editing for live feedback
+            int marginLeft = _imageState.PreviewMarginLeftPx ?? _imageState.MarginLeftPx;
+            int marginTop = _imageState.PreviewMarginTopPx ?? _imageState.MarginTopPx;
+            int outputW = _imageState.PreviewOutputWidthPx ?? _imageState.OutputWidthPx;
+            int outputH = _imageState.PreviewOutputHeightPx ?? _imageState.OutputHeightPx;
+
+            Canvas.SetLeft(CropOverlay, marginLeft);
+            Canvas.SetTop(CropOverlay, marginTop);
+            CropOverlay.Width = Math.Max(1, outputW);
+            CropOverlay.Height = Math.Max(1, outputH);
 
             CropOverlay.Visibility = _imageState.IsCropMode ? Visibility.Visible : Visibility.Hidden;
         }
@@ -661,7 +666,6 @@ namespace BulkCropAndResizeTool
             UpdateFilenameUI();
         }
 
-        private void MarginBox_LostFocus(object sender, RoutedEventArgs e) => _dimensionsController.MarginBox_LostFocus(); 
         private void Unit_CheckedChanged(object sender, RoutedEventArgs e)
         {
             string unit = _dimensionsController.GetCurrentUnit();
@@ -880,16 +884,24 @@ namespace BulkCropAndResizeTool
         #region Dimension Event Handlers
         private void DimensionBox_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
-            _dimensionsController.OnDimensionBoxValueChanged(sender, IsLoaded);
+            _dimensionsController.OnDimensionBoxPreviewChanged(sender, IsLoaded);
         }
 
         private void DimensionBox_LostFocus(object sender, RoutedEventArgs e)
         {
-            _dimensionsController.OnDimensionBoxLostFocus();
+            _dimensionsController.CommitOutputChanges();
             UpdateFilenameUI();
         }
-        private void MarginBox_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e) =>
-            _dimensionsController.OnMarginBoxValueChanged(sender, IsLoaded);
+        private void MarginBox_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            // Use preview method instead of commit
+            _dimensionsController.OnMarginBoxPreviewChanged(sender);
+        }
+        private void MarginBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            // Commit the preview values now
+            _dimensionsController.CommitMarginChanges();
+        }
         #endregion
 
         #region Filename Event Handlers
@@ -931,6 +943,19 @@ namespace BulkCropAndResizeTool
         #region Window Keyboard Handler
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
+            if (e.Key == Key.Escape)
+            {
+                if (_imageState.IsEditingOutput || _imageState.IsEditingMargin)
+                {
+                    // Cancel preview, revert to committed values
+                    _imageState.ClearPreviews();
+                    _dimensionsController.RefreshUI();
+                    // Move focus away to cancel editing
+                    Keyboard.ClearFocus();
+                    e.Handled = true;
+                    return;
+                }
+            }
             if (_imageState.IsResizeMode || CropOverlay.Visibility != Visibility.Visible)
                 return;
             if (_cropController.IsManipulating) return;
