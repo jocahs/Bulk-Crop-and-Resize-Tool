@@ -18,7 +18,7 @@ namespace BulkCropAndResizeTool.Helpers
             };
         }
 
-        public static int ConvertUnitToPixels(double value, string unit, bool clampToMin = true)
+        public static int ConvertUnits(double value, string unit, bool clampToMin = true)
         {
             int result = unit switch
             {
@@ -31,7 +31,7 @@ namespace BulkCropAndResizeTool.Helpers
             return clampToMin ? Math.Max(1, result) : result;
         }
 
-        public static string GetCurrentUnit(bool isPixels, bool isMM, bool isPercent)
+        public static string GetCurrentUnit(bool isMM, bool isPercent)
         {
             if (isPercent) return "%";
             if (isMM) return "mm";

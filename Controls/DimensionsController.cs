@@ -7,7 +7,7 @@ using Xceed.Wpf.Toolkit;
 
 namespace BulkCropAndResizeTool.Controls
 {
-    public record CropDimensionControls(
+    public record DimensionControls(
     TextBox WidthSourceBox,
     TextBox HeightSourceBox,
     IntegerUpDown WidthBox,
@@ -22,10 +22,10 @@ namespace BulkCropAndResizeTool.Controls
     GroupBox AspectRatioGroup,
     GroupBox MarginsSettings,
     Border CropOverlay
-);
+    );
 
-    public class CropDimensionsController(
-        CropDimensionControls controls,
+    public class DimensionsController(
+        DimensionControls controls,
         ImageState imageState,
         Action onCropOverlayUpdateNeeded,
         Action setActionBtnText)
@@ -56,10 +56,7 @@ namespace BulkCropAndResizeTool.Controls
 
         public string GetCurrentUnit()
         {
-            return UnitConverter.GetCurrentUnit(
-                _unitPixels.IsChecked == true,
-                _unitMM.IsChecked == true,
-                _unitPercent.IsChecked == true);
+            return UnitConverter.GetCurrentUnit(_unitMM.IsChecked == true, _unitPercent.IsChecked == true);
         }
 
         public void UpdateUnitAvailability()
@@ -238,13 +235,13 @@ namespace BulkCropAndResizeTool.Controls
             {
                 previewOutputW = unit == "%"
                     ? (int)Math.Round(displayValue / 100.0 * _imageState.SourceWidthPx)
-                    : UnitConverter.ConvertUnitToPixels(displayValue, unit, true);
+                    : UnitConverter.ConvertUnits(displayValue, unit, true);
             }
             else if (sender == _heightBox)
             {
                 previewOutputH = unit == "%"
                     ? (int)Math.Round(displayValue / 100.0 * _imageState.SourceHeightPx)
-                    : UnitConverter.ConvertUnitToPixels(displayValue, unit, true);
+                    : UnitConverter.ConvertUnits(displayValue, unit, true);
             }
 
             // Apply aspect ratio to preview if needed
@@ -307,13 +304,13 @@ namespace BulkCropAndResizeTool.Controls
             {
                 previewMarginL = unit == "%"
                     ? (int)Math.Round(displayValue / 100.0 * _imageState.SourceWidthPx)
-                    : UnitConverter.ConvertUnitToPixels(displayValue, unit, false);
+                    : UnitConverter.ConvertUnits(displayValue, unit, false);
             }
             else if (sender == _marginTopBox)
             {
                 previewMarginT = unit == "%"
                     ? (int)Math.Round(displayValue / 100.0 * _imageState.SourceHeightPx)
-                    : UnitConverter.ConvertUnitToPixels(displayValue, unit, false);
+                    : UnitConverter.ConvertUnits(displayValue, unit, false);
             }
 
             // Clamp preview margins

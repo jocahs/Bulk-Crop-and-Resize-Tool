@@ -7,6 +7,8 @@ using Microsoft.Win32;
 using System;
 using System.Diagnostics;
 using System.IO;
+using Path = System.IO.Path;
+using MessageBox = System.Windows.MessageBox;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -26,11 +28,12 @@ namespace BulkCropAndResizeTool
         private readonly BatchProcessor _batchProcessor;
         private readonly CropOverlayController _cropController;
         private readonly ViewportController _viewportController;
-        private readonly CropDimensionsController _dimensionsController;
+        private readonly DimensionsController _dimensionsController;
 
         private string _lastValidSourcePath = AppConstants.DefaultSrcBoxText;
         private string _lastValidOutputPath = AppConstants.DefaultDstBoxText;
         private string? _userCustomText = null;
+        private string? _lastAppliedDefaultText = null;
         private CancellationTokenSource? _cancellationTokenSource;
         private OverwriteAction? _batchAction = null;
         private int CurrentFileCount = 0;
@@ -45,21 +48,8 @@ namespace BulkCropAndResizeTool
             _logger = new LoggingService(LogTextBox, AppendLog);
             _batchProcessor = new BatchProcessor(_logger);
             _cropController = new CropOverlayController(CropOverlay, _imageState, _viewportState);
-            _viewportController = new ViewportController(
-                PreviewCanvas, PreviewImage, CropOverlay, HScrollBar, VScrollBar, ZoomLabel, PanModeBtn,
-                _imageState, _viewportState, UpdateCropOverlay);
-            _dimensionsController = new CropDimensionsController(
-                new CropDimensionControls(
-                    WidthSourceBox, HeightSourceBox, WidthBox, HeightBox, MarginLeftBox, MargintopBox,
-                    UnitPixels, UnitMM, UnitPer, ModeResize, AspectRatio, AspectRatioGroup, MarginsSettings,
-                    CropOverlay
-                ),
-                _imageState,
-                UpdateCropOverlay,
-                SetActionBtnText
-            );
-
-            InitializeApplication();
+            _viewportController = new ViewportController( PreviewCanvas, PreviewImage, CropOverlay, HScrollBar, VScrollBar, ZoomLabel, PanModeBtn, _imageState, _viewportState, UpdateCropOverlay);
+            _dimensionsController = new DimensionsController(new DimensionControls(WidthSourceBox, HeightSourceBox, WidthBox, HeightBox, MarginLeftBox, MargintopBox, UnitPixels, UnitMM, UnitPer, ModeResize, AspectRatio, AspectRatioGroup, MarginsSettings, CropOverlay), _imageState, UpdateCropOverlay, SetActionBtnText ); InitializeApplication();
         }
         #endregion
 
@@ -176,22 +166,17 @@ namespace BulkCropAndResizeTool
                 {
                     if (unit == "%")
                     {
-                        // Percent is relative by definition: reapply the same percentage
-                        // to the new source dimensions.
                         _imageState.OutputWidthPx = (int)Math.Round(previousWidthDisplay / 100.0 * _imageState.SourceWidthPx);
                         _imageState.OutputHeightPx = (int)Math.Round(previousHeightDisplay / 100.0 * _imageState.SourceHeightPx);
                     }
                     else
                     {
-                        // Pixels/mm are absolute: keep the exact value the user set, just
-                        // reconverted to pixels (mm depends on DPI, not on the image itself).
-                        _imageState.OutputWidthPx = UnitConverter.ConvertUnitToPixels(previousWidthDisplay, unit, true);
-                        _imageState.OutputHeightPx = UnitConverter.ConvertUnitToPixels(previousHeightDisplay, unit, true);
+                        _imageState.OutputWidthPx = UnitConverter.ConvertUnits(previousWidthDisplay, unit, true);
+                        _imageState.OutputHeightPx = UnitConverter.ConvertUnits(previousHeightDisplay, unit, true);
                     }
                 }
                 else
                 {
-                    // First image ever loaded: no custom value exists yet, default to half size.
                     _imageState.OutputWidthPx = _imageState.SourceWidthPx / 2;
                     _imageState.OutputHeightPx = _imageState.SourceHeightPx / 2;
                 }
@@ -209,7 +194,7 @@ namespace BulkCropAndResizeTool
                 RightPanelGrid.IsEnabled = true;
                 ActionBtn.IsEnabled = true;
 
-                _logger.Log($"Loaded: {System.IO.Path.GetFileName(filePath)}");
+                _logger.Log($"Loaded: {Path.GetFileName(filePath)}");
             }
             catch (Exception ex)
             {
@@ -266,6 +251,7 @@ namespace BulkCropAndResizeTool
             UpdateDisplayedImage();
             _dimensionsController.RefreshUI();
         }
+        
         #endregion
 
         #region Crop Overlay
@@ -307,7 +293,6 @@ namespace BulkCropAndResizeTool
 
         #region Filename Management
 
-        private string? _lastAppliedDefaultText = null; // add near the existing _userCustomText field
         private void UpdateFilenameUI()
         {
             UpdateSourceFilename();
@@ -378,8 +363,8 @@ namespace BulkCropAndResizeTool
 
             if (System.IO.File.Exists(path))
             {
-                baseName = System.IO.Path.GetFileNameWithoutExtension(path);
-                fileExtension = System.IO.Path.GetExtension(path);
+                baseName = Path.GetFileNameWithoutExtension(path);
+                fileExtension = Path.GetExtension(path);
             }
             else if (Directory.Exists(path))
             {
@@ -388,8 +373,8 @@ namespace BulkCropAndResizeTool
                     var files = Directory.GetFiles(path, ext, SearchOption.TopDirectoryOnly);
                     if (files.Length > 0)
                     {
-                        baseName = System.IO.Path.GetFileNameWithoutExtension(files[0]);
-                        fileExtension = System.IO.Path.GetExtension(files[0]);
+                        baseName = Path.GetFileNameWithoutExtension(files[0]);
+                        fileExtension = Path.GetExtension(files[0]);
                         break;
                     }
                 }
@@ -429,7 +414,7 @@ namespace BulkCropAndResizeTool
                 if (Directory.Exists(SrcBox.Text))
                     outputFolder = SrcBox.Text;
                 else
-                    outputFolder = System.IO.Path.GetDirectoryName(SrcBox.Text) ?? Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
+                    outputFolder = Path.GetDirectoryName(SrcBox.Text) ?? Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
             }
 
             try
@@ -495,8 +480,8 @@ namespace BulkCropAndResizeTool
                 return;
             }
 
-            string originalName = string.IsNullOrEmpty(_imageState.CurrentImagePath) ? "image" : System.IO.Path.GetFileName(_imageState.CurrentImagePath);
-            string ext = System.IO.Path.GetExtension(originalName);
+            string originalName = string.IsNullOrEmpty(_imageState.CurrentImagePath) ? "image" : Path.GetFileName(_imageState.CurrentImagePath);
+            string ext = Path.GetExtension(originalName);
             if (string.IsNullOrWhiteSpace(ext)) ext = AppConstants.DefaultExtension;
 
             string finalBase;
@@ -504,18 +489,18 @@ namespace BulkCropAndResizeTool
             string sourcePart = (NameSource.Text ?? "").Trim();
 
             if (OverwriteChk.IsChecked == true)
-                finalBase = System.IO.Path.GetFileNameWithoutExtension(originalName);
+                finalBase = Path.GetFileNameWithoutExtension(originalName);
             else if (ModePrefix.IsChecked == true)
                 finalBase = $"{preSuf}{sourcePart}";
             else
                 finalBase = $"{sourcePart}{preSuf}";
 
             string saveFileName = finalBase + ext;
-            string savePath = System.IO.Path.Combine(outputFolder, saveFileName);
+            string savePath = Path.Combine(outputFolder, saveFileName);
 
             if (System.IO.File.Exists(savePath) && OverwriteChk.IsChecked == false)
             {
-                var res = System.Windows.MessageBox.Show($"File already exists:\n{savePath}\nOverwrite?",
+                var res = MessageBox.Show($"File already exists:\n{savePath}\nOverwrite?",
                                          "Overwrite?",
                                          MessageBoxButton.YesNo,
                                          MessageBoxImage.Warning,
@@ -523,11 +508,11 @@ namespace BulkCropAndResizeTool
                 if (res != MessageBoxResult.Yes)
                 {
                     int count = 1;
-                    string baseName = System.IO.Path.GetFileNameWithoutExtension(saveFileName);
+                    string baseName = Path.GetFileNameWithoutExtension(saveFileName);
                     while (System.IO.File.Exists(savePath))
                     {
                         saveFileName = $"{baseName}_{count}{ext}";
-                        savePath = System.IO.Path.Combine(outputFolder, saveFileName);
+                        savePath = Path.Combine(outputFolder, saveFileName);
                         count++;
                     }
                 }
@@ -688,7 +673,7 @@ namespace BulkCropAndResizeTool
 
         private void ResetAll_Click(object sender, RoutedEventArgs e)
         {
-            var result = System.Windows.MessageBox.Show(
+            var result = MessageBox.Show(
                 "This will clear the loaded image and reset all settings to their defaults. Continue?",
                 "Reset Everything",
                 MessageBoxButton.YesNo,
@@ -909,7 +894,7 @@ namespace BulkCropAndResizeTool
             var text = PreSufBox.Text ?? string.Empty;
             if (string.IsNullOrEmpty(text))
             {
-                var result = System.Windows.MessageBox.Show(
+                var result = MessageBox.Show(
                     "Prefix/Suffix additional name is empty. Overwrite?",
                     "Overwrite?",
                     MessageBoxButton.YesNo,
@@ -1009,8 +994,8 @@ namespace BulkCropAndResizeTool
             {
                 try
                 {
-                    dialog.InitialDirectory = System.IO.Path.GetDirectoryName(initialPath);
-                    dialog.FileName = System.IO.Path.GetFileName(initialPath);
+                    dialog.InitialDirectory = Path.GetDirectoryName(initialPath);
+                    dialog.FileName = Path.GetFileName(initialPath);
                 }
                 catch { }
             }
@@ -1076,9 +1061,10 @@ namespace BulkCropAndResizeTool
                 string? validPath = _fileService.GetValidDirectoryPath(path);
                 if (DstBox.Text == AppConstants.DefaultDstBoxText || DstBox.Text == _fileService.GetValidDirectoryPath(_lastValidSourcePath))
                 {
-                    if (validPath != null) SetDirectoryPath(validPath);
+                    if (!string.IsNullOrWhiteSpace(validPath))
+                        SetDirectoryPath(validPath);
                 }
-                _logger.Log($"Selected file: {System.IO.Path.GetFileName(path)}");
+                _logger.Log($"Selected file: {Path.GetFileName(path)}");
                 ActionBtn.IsEnabled = true;
                 _lastValidSourcePath = path;
                 LoadPreviewImage(path);
@@ -1095,7 +1081,7 @@ namespace BulkCropAndResizeTool
                     LoadPreviewImage(files[0]);
                     _lastValidSourcePath = path;
                     _logger.Log($"Selected folder: {path}");
-                    _logger.Log($"Using first image: {System.IO.Path.GetFileName(files[0])}");
+                    _logger.Log($"Using first image: {Path.GetFileName(files[0])}");
                     ActionBtn.IsEnabled = true;
 
                     if (shouldUpdateDst)
@@ -1120,7 +1106,7 @@ namespace BulkCropAndResizeTool
             var files = _fileService.GetImageFiles(selectedFolder);
             if (files.Count == 0)
             {
-                System.Windows.MessageBox.Show(
+                MessageBox.Show(
                     "No image files found in the selected folder.",
                     "Invalid Folder",
                     MessageBoxButton.OK,
@@ -1196,7 +1182,7 @@ namespace BulkCropAndResizeTool
             }
             else
             {
-                System.Windows.MessageBox.Show(
+                MessageBox.Show(
                     "The path is not valid. Please check for invalid characters, reserved names, or missing drive.",
                     "Invalid Path",
                     MessageBoxButton.OK,
@@ -1230,13 +1216,13 @@ namespace BulkCropAndResizeTool
             }
 
             string? validPath = _fileService.GetValidDirectoryPath(path);
-            if (validPath != null)
+            if (!string.IsNullOrWhiteSpace(validPath))
             {
                 SetDirectoryPath(validPath);
             }
             else
             {
-                System.Windows.MessageBox.Show(
+                MessageBox.Show(
                     "The entered path is not valid for a folder. Please check for invalid characters, reserved names, or missing drive.",
                     "Invalid Path",
                     MessageBoxButton.OK,
