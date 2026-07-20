@@ -18,6 +18,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using Xceed.Wpf.Toolkit;
+using static System.Net.WebRequestMethods;
 
 namespace BulkCropAndResizeTool
 {
@@ -34,13 +35,14 @@ namespace BulkCropAndResizeTool
         private readonly BatchProcessor _batchProcessor;
         private readonly CropOverlayController _cropController;
         private readonly ViewportController _viewportController;
+        private readonly CropDimensionsController _dimensionsController;
 
-        private bool _isUpdatingUI = false;
         private string _lastValidSourcePath = AppConstants.DefaultSrcBoxText;
         private string _lastValidOutputPath = AppConstants.DefaultDstBoxText;
         private string? _userCustomText = null;
         private CancellationTokenSource? _cancellationTokenSource;
         private OverwriteAction? _batchAction = null;
+        private int CurrentFileCount = 0;
 
         #endregion
 
@@ -57,6 +59,10 @@ namespace BulkCropAndResizeTool
             _viewportController = new ViewportController(
                 PreviewCanvas, PreviewImage, CropOverlay, HScrollBar, VScrollBar, ZoomLabel, PanModeBtn,
                 _imageState, _viewportState, UpdateCropOverlay);
+            _dimensionsController = new CropDimensionsController(
+                WidthSourceBox, HeightSourceBox, WidthBox, HeightBox, MarginLeftBox, MargintopBox,
+                UnitPixels, UnitMM, UnitPer, ModeResize, AspectRatio, AspectRatioGroup, MarginsSettings,
+                CropOverlay, _imageState, UpdateCropOverlay, SetActionBtnText);
 
             InitializeApplication();
         }
@@ -68,20 +74,20 @@ namespace BulkCropAndResizeTool
             CropOverlay.Visibility = Visibility.Hidden;
             RightPanelGrid.IsEnabled = false;
             UnitPer.IsEnabled = false;
-
-            RefreshUI();
-            UpdateUnitAvailability();
+            CurrentFileCount = 0;
+            _dimensionsController.RefreshUI();
+            _dimensionsController.UpdateUnitAvailability();
             UpdateFilenameUI();
 
             RegisterEvents();
-            Loaded += MainWindow_Loaded;
+            Loaded += (s, e) => Width = MinWidth;
         }
 
         private void RegisterEvents()
         {
             // Action buttons
-            ActionCrop.Checked += Action_CheckedChanged;
-            ActionResize.Checked += Action_CheckedChanged;
+            ModeCrop.Checked += Mode_CheckedChanged;
+            ModeResize.Checked += Mode_CheckedChanged;
 
             // Zoom controls
             FitBtn.Click += FitBtn_Click;
@@ -102,22 +108,25 @@ namespace BulkCropAndResizeTool
             HeightBox.ValueChanged += DimensionBox_ValueChanged;
             MarginLeftBox.ValueChanged += MarginBox_ValueChanged;
             MargintopBox.ValueChanged += MarginBox_ValueChanged;
+            MarginLeftBox.LostFocus += MarginBox_LostFocus;
+            MargintopBox.LostFocus += MarginBox_LostFocus;
 
             // Filename
-            ModePrefix.Checked += ModePrefix_Checked;
-            ModeSuffix.Checked += ModeSuffix_Checked;
+            ModePrefix.Checked += (s, e) => UpdateFilenameUI();
+            ModeSuffix.Checked += (s, e) => UpdateFilenameUI();
             PreSufBox.LostFocus += PreSufBox_LostFocus;
-            OverwriteChk.Checked += Overwrite_CheckedChanged;
-            OverwriteChk.Unchecked += Overwrite_CheckedChanged;
+            OverwriteChk.Checked += (s, e) => UpdateFilenameUI();
+            OverwriteChk.Unchecked += (s, e) => UpdateFilenameUI();
 
             // Image interactions
-            PreviewImage.MouseDown += PreviewImage_MouseDown;
+            PreviewImage.MouseDown += PreviewImage_MouseDown;   
             PreviewImage.MouseMove += PreviewImage_MouseMove;
             PreviewImage.MouseUp += PreviewImage_MouseUp;
             PreviewImage.SizeChanged += (s, e) => UpdateCropOverlay();
             PreviewCanvas.MouseWheel += PreviewArea_MouseWheel;
             PreviewCanvas.MouseLeave += (s, e) => Cursor = Cursors.Arrow;
             PreviewCanvas.PreviewMouseDown += PreviewCanvas_PreviewMouseDown;
+            PreviewCanvas.MouseMove += PreviewCanvas_MouseMove;
 
             // Crop overlay
             CropOverlay.MouseMove += CropOverlay_MouseMove;
@@ -150,10 +159,6 @@ namespace BulkCropAndResizeTool
             AspectRatio.Unchecked += AspectRatio_Checked;
         }
 
-        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
-        {
-            Width = MinWidth;
-        }
         #endregion
 
         #region Image Loading
@@ -161,17 +166,37 @@ namespace BulkCropAndResizeTool
         {
             try
             {
+                string unit = _dimensionsController.GetCurrentUnit();
+                bool hasPreviousImage = _imageState.OriginalImage != null;
+                double previousWidthDisplay = WidthBox.Value ?? 0;
+                double previousHeightDisplay = HeightBox.Value ?? 0;
+
                 var image = _imageService.LoadImageFromFile(filePath) ?? throw new Exception("Failed to load image.");
                 _imageState.OriginalImage = image;
                 _imageState.CurrentRotation = 0;
                 _imageState.PreviousRotation = 0;
                 _imageState.SetSourceDimensions(image.PixelWidth, image.PixelHeight);
 
-                // Reset output to half size if this is the first load
-                bool wasDefaultHalfSize = _imageState.OutputWidthPx == _imageState.SourceWidthPx / 2 &&
-                                          _imageState.OutputHeightPx == _imageState.SourceHeightPx / 2;
-                if (wasDefaultHalfSize)
+                if (hasPreviousImage)
                 {
+                    if (unit == "%")
+                    {
+                        // Percent is relative by definition: reapply the same percentage
+                        // to the new source dimensions.
+                        _imageState.OutputWidthPx = (int)Math.Round(previousWidthDisplay / 100.0 * _imageState.SourceWidthPx);
+                        _imageState.OutputHeightPx = (int)Math.Round(previousHeightDisplay / 100.0 * _imageState.SourceHeightPx);
+                    }
+                    else
+                    {
+                        // Pixels/mm are absolute: keep the exact value the user set, just
+                        // reconverted to pixels (mm depends on DPI, not on the image itself).
+                        _imageState.OutputWidthPx = UnitConverter.ConvertUnitToPixels(previousWidthDisplay, unit, true);
+                        _imageState.OutputHeightPx = UnitConverter.ConvertUnitToPixels(previousHeightDisplay, unit, true);
+                    }
+                }
+                else
+                {
+                    // First image ever loaded: no custom value exists yet, default to half size.
                     _imageState.OutputWidthPx = _imageState.SourceWidthPx / 2;
                     _imageState.OutputHeightPx = _imageState.SourceHeightPx / 2;
                 }
@@ -182,6 +207,8 @@ namespace BulkCropAndResizeTool
                 UpdateDisplayedImage();
                 _imageState.CurrentImagePath = filePath;
                 UpdateSourceFilename();
+
+                _dimensionsController.RefreshUI();
 
                 CropOverlay.Visibility = Visibility.Visible;
                 RightPanelGrid.IsEnabled = true;
@@ -195,7 +222,6 @@ namespace BulkCropAndResizeTool
                 _logger.Log($"Failed to load preview: {ex.Message}");
             }
         }
-
         private void ClearPreview()
         {
             PreviewImage.Source = null;
@@ -215,10 +241,8 @@ namespace BulkCropAndResizeTool
             // Compute dimensions after rotation
             int w = _imageState.OriginalImage.PixelWidth;
             int h = _imageState.OriginalImage.PixelHeight;
-            double angle = NormalizeAngle(_imageState.CurrentRotation);
 
-            bool shouldSwap = Math.Abs(angle - 90) < 0.1 || Math.Abs(angle - 270) < 0.1;
-            if (shouldSwap)
+            if (CropMath.IsQuarterTurn(_imageState.CurrentRotation))
             {
                 w = _imageState.OriginalImage.PixelHeight;
                 h = _imageState.OriginalImage.PixelWidth;
@@ -243,17 +267,11 @@ namespace BulkCropAndResizeTool
             PreviewImage.Source = display ?? _imageState.OriginalImage;
         }
 
-        private static double NormalizeAngle(double angle)
-        {
-            angle %= 360;
-            if (angle < 0) angle += 360;
-            return angle;
-        }
-
         private void RotateImage(double degrees)
         {
             _imageState.CurrentRotation += degrees;
             UpdateDisplayedImage();
+            _dimensionsController.RefreshUI();
         }
         #endregion
 
@@ -277,182 +295,57 @@ namespace BulkCropAndResizeTool
 
         private void TransformCropRectangle(double deltaAngle, int oldW, int oldH)
         {
-            double angle = NormalizeAngle(deltaAngle);
-            double left = _imageState.MarginLeftPx;
-            double top = _imageState.MarginTopPx;
-            double width = _imageState.OutputWidthPx;
-            double height = _imageState.OutputHeightPx;
+            var (marginLeftPx, marginTopPx, widthPx, heightPx) = CropMath.RotateCropRect(
+                deltaAngle, oldW, oldH,
+                _imageState.MarginLeftPx, _imageState.MarginTopPx,
+                _imageState.OutputWidthPx, _imageState.OutputHeightPx);
 
-            if (Math.Abs(angle - 90) < 0.1) // +90°
-            {
-                _imageState.MarginLeftPx = (int)Math.Round(oldH - top - height);
-                _imageState.MarginTopPx = (int)Math.Round(left);
-                _imageState.OutputWidthPx = (int)Math.Round(height);
-                _imageState.OutputHeightPx = (int)Math.Round(width);
-            }
-            else if (Math.Abs(angle - 180) < 0.1) // 180°
-            {
-                _imageState.MarginLeftPx = (int)Math.Round(oldW - left - width);
-                _imageState.MarginTopPx = (int)Math.Round(oldH - top - height);
-            }
-            else if (Math.Abs(angle - 270) < 0.1) // -90°
-            {
-                _imageState.MarginLeftPx = (int)Math.Round(top);
-                _imageState.MarginTopPx = (int)Math.Round(oldW - left - width);
-                _imageState.OutputWidthPx = (int)Math.Round(height);
-                _imageState.OutputHeightPx = (int)Math.Round(width);
-            }
-        }
-        #endregion
-
-        #region UI Refresh
-        private void RefreshUI()
-        {
-            ClampCropRectangle();
-            UpdateMaxValues();
-            UpdateDimensionTextBoxes();
-        }
-
-        private void UpdateDimensionTextBoxes()
-        {
-            if (_isUpdatingUI) return;
-            _isUpdatingUI = true;
-
-            try
-            {
-                string unit = GetCurrentUnit();
-
-                if (unit == "%")
-                {
-                    WidthSourceBox.Text = "100";
-                    HeightSourceBox.Text = "100";
-
-                    double percentW = (double)_imageState.OutputWidthPx / _imageState.SourceWidthPx * 100;
-                    double percentH = (double)_imageState.OutputHeightPx / _imageState.SourceHeightPx * 100;
-                    WidthBox.Value = (int)Math.Round(Math.Max(1, percentW));
-                    HeightBox.Value = (int)Math.Round(Math.Max(1, percentH));
-                    MarginLeftBox.Value = 0;
-                    MargintopBox.Value = 0;
-                }
-                else
-                {
-                    WidthSourceBox.Text = Math.Max(1, (int)Math.Round(UnitConverter.ConvertPixelsToUnit(_imageState.SourceWidthPx, unit))).ToString();
-                    HeightSourceBox.Text = Math.Max(1, (int)Math.Round(UnitConverter.ConvertPixelsToUnit(_imageState.SourceHeightPx, unit))).ToString();
-
-                    WidthBox.Value = Math.Max(1, (int)Math.Round(UnitConverter.ConvertPixelsToUnit(_imageState.OutputWidthPx, unit)));
-                    HeightBox.Value = Math.Max(1, (int)Math.Round(UnitConverter.ConvertPixelsToUnit(_imageState.OutputHeightPx, unit)));
-                    MarginLeftBox.Value = (int)Math.Round(UnitConverter.ConvertPixelsToUnit(_imageState.MarginLeftPx, unit));
-                    MargintopBox.Value = (int)Math.Round(UnitConverter.ConvertPixelsToUnit(_imageState.MarginTopPx, unit));
-                }
-            }
-            finally
-            {
-                _isUpdatingUI = false;
-                UpdateCropOverlay();
-            }
-        }
-
-        private void UpdateMaxValues()
-        {
-            string unit = GetCurrentUnit();
-
-            if (_imageState.IsCropMode)
-            {
-                int maxWidthPx = _imageState.SourceWidthPx - _imageState.MarginLeftPx;
-                int maxHeightPx = _imageState.SourceHeightPx - _imageState.MarginTopPx;
-
-                WidthBox.Maximum = (int)Math.Ceiling(UnitConverter.ConvertPixelsToUnit(maxWidthPx, unit));
-                HeightBox.Maximum = (int)Math.Ceiling(UnitConverter.ConvertPixelsToUnit(maxHeightPx, unit));
-            }
-            else
-            {
-                WidthBox.Maximum = 99999;
-                HeightBox.Maximum = 99999;
-            }
-        }
-
-        private void ClampCropRectangle()
-        {
-            _imageState.OutputWidthPx = Math.Max(1, _imageState.OutputWidthPx);
-            _imageState.OutputHeightPx = Math.Max(1, _imageState.OutputHeightPx);
-
-            if (_imageState.IsCropMode)
-            {
-                _imageState.OutputWidthPx = Math.Min(_imageState.OutputWidthPx, _imageState.SourceWidthPx);
-                _imageState.OutputHeightPx = Math.Min(_imageState.OutputHeightPx, _imageState.SourceHeightPx);
-            }
-
-            _imageState.MarginLeftPx = Math.Max(0, _imageState.MarginLeftPx);
-            _imageState.MarginTopPx = Math.Max(0, _imageState.MarginTopPx);
-
-            if (_imageState.IsCropMode)
-            {
-                if (_imageState.MarginLeftPx + _imageState.OutputWidthPx > _imageState.SourceWidthPx)
-                    _imageState.OutputWidthPx = _imageState.SourceWidthPx - _imageState.MarginLeftPx;
-
-                if (_imageState.MarginTopPx + _imageState.OutputHeightPx > _imageState.SourceHeightPx)
-                    _imageState.OutputHeightPx = _imageState.SourceHeightPx - _imageState.MarginTopPx;
-
-                _imageState.MarginLeftPx = Math.Min(_imageState.MarginLeftPx, _imageState.SourceWidthPx - _imageState.OutputWidthPx);
-                _imageState.MarginTopPx = Math.Min(_imageState.MarginTopPx, _imageState.SourceHeightPx - _imageState.OutputHeightPx);
-                _imageState.MarginLeftPx = Math.Max(0, _imageState.MarginLeftPx);
-                _imageState.MarginTopPx = Math.Max(0, _imageState.MarginTopPx);
-            }
-        }
-        #endregion
-
-        #region Unit Management
-        private string GetCurrentUnit()
-        {
-            return UnitConverter.GetCurrentUnit(
-                UnitPixels.IsChecked == true,
-                UnitMM.IsChecked == true,
-                UnitPer.IsChecked == true);
-        }
-
-        private void UpdateUnitAvailability()
-        {
-            bool isResize = ActionResize.IsChecked == true;
-            UnitPer.IsEnabled = isResize;
-            UnitPer.IsChecked = isResize;
-            StackRatio.IsEnabled = isResize;
-            AspectRatio.IsChecked = isResize;
-            MarginsSettings.IsEnabled = !isResize;
-            ActionBtn.Content = isResize ? "RESIZE IMAGE(S)" : "CROP IMAGE(S)";
-
-            if (isResize) CropOverlay.Visibility = Visibility.Hidden;
-            _imageState.IsCropMode = !isResize;
-
-            if (!isResize && UnitPer.IsChecked == true)
-                UnitPixels.IsChecked = true;
+            _imageState.MarginLeftPx = marginLeftPx;
+            _imageState.MarginTopPx = marginTopPx;
+            _imageState.OutputWidthPx = widthPx;
+            _imageState.OutputHeightPx = heightPx;
         }
         #endregion
 
         #region Filename Management
+        
+        private string? _lastAppliedDefaultText = null; // add near the existing _userCustomText field
         private void UpdateFilenameUI()
         {
             UpdateSourceFilename();
-            bool isResize = ActionResize.IsChecked == true;
+            bool isResize = ModeResize.IsChecked == true;
             bool isPrefix = ModePrefix.IsChecked == true;
 
             string defaultText = GetDefaultFilenameText(isResize, isPrefix);
             string currentText = PreSufBox.Text;
-            bool isDefaultText = currentText == AppConstants.DefaultCropSuffix ||
-                               currentText == AppConstants.DefaultCropPrefix ||
-                               currentText == AppConstants.DefaultResizeSuffix ||
-                               currentText == AppConstants.DefaultResizePrefix;
 
-            if (!isDefaultText)
+            bool isStillDefault = _lastAppliedDefaultText == null || currentText == _lastAppliedDefaultText;
+            if (!isStillDefault)
                 _userCustomText = currentText;
 
             PreSufBox.Text = _userCustomText ?? defaultText;
+            _lastAppliedDefaultText = defaultText;
+
             LayoutPositioning();
         }
 
-        private static string GetDefaultFilenameText(bool isResize, bool isPrefix)
+        private string GetDefaultFilenameText(bool isResize, bool isPrefix)
         {
             if (isResize)
-                return isPrefix ? AppConstants.DefaultResizePrefix : AppConstants.DefaultResizeSuffix;
+            {
+                int w, h;
+                if (UnitPer.IsChecked == true)
+                {
+                    w = _imageState.OutputWidthPx;
+                    h = _imageState.OutputHeightPx;
+                }
+                else
+                {
+                    w = WidthBox.Value ?? 0;
+                    h = HeightBox.Value ?? 0;
+                }
+                return isPrefix ? $"{w}x{h}_" : $"_{w}x{h}";
+            }
             return isPrefix ? AppConstants.DefaultCropPrefix : AppConstants.DefaultCropSuffix;
         }
 
@@ -461,7 +354,7 @@ namespace BulkCropAndResizeTool
             bool isEnabled = OverwriteChk.IsChecked == true;
             ModePrefix.IsEnabled = !isEnabled;
             ModeSuffix.IsEnabled = !isEnabled;
-            PreSufBox.IsEnabled = !isEnabled;
+            PreSufBox.Visibility = isEnabled ? Visibility.Collapsed : Visibility.Visible;
 
             if (!isEnabled)
             {
@@ -488,7 +381,7 @@ namespace BulkCropAndResizeTool
             string baseName = AppConstants.DefaultFilename;
             string fileExtension = AppConstants.DefaultExtension;
 
-            if (File.Exists(path))
+            if (System.IO.File.Exists(path))
             {
                 baseName = System.IO.Path.GetFileNameWithoutExtension(path);
                 fileExtension = System.IO.Path.GetExtension(path);
@@ -564,7 +457,7 @@ namespace BulkCropAndResizeTool
             }
 
             // Check if a single file is selected
-            if (File.Exists(SrcBox.Text))
+            if (System.IO.File.Exists(SrcBox.Text))
             {
                 // Load the image if not already loaded
                 if (_imageState.OriginalImage == null || _imageState.CurrentImagePath != SrcBox.Text)
@@ -587,8 +480,8 @@ namespace BulkCropAndResizeTool
                 return;
             }
 
-            bool isResize = ActionResize.IsChecked == true;
-            string unit = GetCurrentUnit();
+            bool isResize = ModeResize.IsChecked == true;
+            string unit = _dimensionsController.GetCurrentUnit();
 
             var processedImage = _imageService.ProcessImage(
                 _imageState.OriginalImage!,
@@ -626,7 +519,7 @@ namespace BulkCropAndResizeTool
             string saveFileName = finalBase + ext;
             string savePath = System.IO.Path.Combine(outputFolder, saveFileName);
 
-            if (File.Exists(savePath) && OverwriteChk.IsChecked == false)
+            if (System.IO.File.Exists(savePath) && OverwriteChk.IsChecked == false)
             {
                 var res = System.Windows.MessageBox.Show($"File already exists:\n{savePath}\nOverwrite?",
                                          "Overwrite?",
@@ -637,7 +530,7 @@ namespace BulkCropAndResizeTool
                 {
                     int count = 1;
                     string baseName = System.IO.Path.GetFileNameWithoutExtension(saveFileName);
-                    while (File.Exists(savePath))
+                    while (System.IO.File.Exists(savePath))
                     {
                         saveFileName = $"{baseName}_{count}{ext}";
                         savePath = System.IO.Path.Combine(outputFolder, saveFileName);
@@ -661,7 +554,7 @@ namespace BulkCropAndResizeTool
         }
         private bool ShouldSkipFile(string saveFileName, string savePath)
         {
-            if (OverwriteChk.IsChecked == false && File.Exists(savePath))
+            if (OverwriteChk.IsChecked == false && System.IO.File.Exists(savePath))
             {
                 if (_batchAction.HasValue)
                     return _batchAction.Value == OverwriteAction.SkipAll;
@@ -699,11 +592,12 @@ namespace BulkCropAndResizeTool
                 _logger.Log("No image files found in the source folder.");
                 return;
             }
+            else CurrentFileCount = files.Count;
 
             _logger.Log($"Starting batch processing for {files.Count} images...");
 
-            bool isResize = ActionResize.IsChecked == true;
-            string unit = GetCurrentUnit();
+            bool isResize = ModeResize.IsChecked == true;
+            string unit = _dimensionsController.GetCurrentUnit();
             double angle = _imageState.CurrentRotation % 360;
 
             Progress.Maximum = files.Count;
@@ -761,20 +655,19 @@ namespace BulkCropAndResizeTool
 
         #region Event Handlers
 
-        private void Action_CheckedChanged(object sender, RoutedEventArgs e)
+        private void Mode_CheckedChanged(object sender, RoutedEventArgs e)
         {
-            UpdateUnitAvailability();
+            _dimensionsController.UpdateUnitAvailability();
             UpdateFilenameUI();
         }
 
+        private void MarginBox_LostFocus(object sender, RoutedEventArgs e) => _dimensionsController.MarginBox_LostFocus(); 
         private void Unit_CheckedChanged(object sender, RoutedEventArgs e)
         {
-            string unit = GetCurrentUnit();
+            string unit = _dimensionsController.GetCurrentUnit();
             Resources["UnitText"] = unit == "px" ? "px" : unit == "mm" ? "mm" : "%";
-            UpdateMaxValues();
-            if (AspectRatio.IsChecked == true)
-                AdjustAspectRatio();
-            UpdateDimensionTextBoxes();
+            _dimensionsController.OnUnitChanged();
+            UpdateFilenameUI();
         }
 
         #endregion
@@ -784,20 +677,18 @@ namespace BulkCropAndResizeTool
         {
             _imageState.Reset();
             _viewportState.Reset();
-            _userCustomText = null;
-
+            
             AspectRatio.IsChecked = false;
-            ActionCrop.IsChecked = true;
+            ModeCrop.IsChecked = true;
             UnitPixels.IsChecked = true;
             ModePrefix.IsChecked = true;
             OverwriteChk.IsChecked = false;
-            PreSufBox.Text = AppConstants.DefaultCropPrefix;
             OpenAfterChk.IsChecked = true;
-
             Progress.Value = 0;
             CancelBtn.IsEnabled = false;
+            _userCustomText = null;
 
-            RefreshUI();
+            _dimensionsController.RefreshUI();
             UpdateFilenameUI();
             _logger.Log("Settings reset to default.");
         }
@@ -841,12 +732,9 @@ namespace BulkCropAndResizeTool
         private void PanModeBtn_Click(object sender, RoutedEventArgs e) => _viewportController.TogglePanMode();
         #endregion
 
-        #region Scroll Event Handlers
+        #region Image Interaction Event Handlers
         private void ScrollBar_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) =>
             _viewportController.OnScrollBarValueChanged(sender, e);
-        #endregion
-
-        #region Image Interaction Event Handlers
         private void PreviewImage_MouseDown(object sender, MouseButtonEventArgs e)
         {
             if (!_viewportState.IsPanMode || e.LeftButton != MouseButtonState.Pressed) return;
@@ -886,7 +774,7 @@ namespace BulkCropAndResizeTool
             double top = Canvas.GetTop(CropOverlay);
             double right = left + CropOverlay.Width;
             double bottom = top + CropOverlay.Height;
-            double tolerance = 20.0;
+            double tolerance = 10.0 / _viewportState.CurrentScale;
 
             bool nearLeft = Math.Abs(pos.X - left) < tolerance;
             bool nearRight = Math.Abs(pos.X - right) < tolerance;
@@ -940,7 +828,7 @@ namespace BulkCropAndResizeTool
             double top = Canvas.GetTop(CropOverlay);
             double right = left + CropOverlay.Width;
             double bottom = top + CropOverlay.Height;
-            double tolerance = 20.0;
+            double tolerance = 10.0 / _viewportState.CurrentScale;
 
             bool nearLeft = Math.Abs(pos.X - left) < tolerance;
             bool nearRight = Math.Abs(pos.X - right) < tolerance;
@@ -972,7 +860,7 @@ namespace BulkCropAndResizeTool
             if (_cropController.IsManipulating)
             {
                 Point pos = e.GetPosition(PreviewCanvas);
-                _cropController.UpdateManipulation(pos, UpdateDimensionTextBoxes);
+                _cropController.UpdateManipulation(pos, () => _dimensionsController.UpdateDimensionTextBoxes());
                 e.Handled = true;
             }
         }
@@ -986,80 +874,25 @@ namespace BulkCropAndResizeTool
                 e.Handled = true;
             }
         }
-        
+
         #endregion
 
         #region Dimension Event Handlers
         private void DimensionBox_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
-            if (_isUpdatingUI || !IsLoaded) return;
-
-            if (sender == WidthBox)
-            {
-                UpdatePixelFromBox(WidthBox, ref _imageState.OutputWidthPx, _imageState.SourceWidthPx, true);
-            }
-            else if (sender == HeightBox)
-            {
-                UpdatePixelFromBox(HeightBox, ref _imageState.OutputHeightPx, _imageState.SourceHeightPx, true);
-            }
+            _dimensionsController.OnDimensionBoxValueChanged(sender, IsLoaded);
         }
 
         private void DimensionBox_LostFocus(object sender, RoutedEventArgs e)
         {
-            if (!(AspectRatio.IsChecked == true)) return;
-            if (_isUpdatingUI) return;
-
-            string unit = GetCurrentUnit();
-
-            if (sender == WidthBox)
-            {
-                int currentDisplay = WidthBox.Value ?? 0;
-                int expectedDisplay = (int)Math.Round(UnitConverter.ConvertPixelsToUnit(_imageState.OutputWidthPx, unit));
-                if (currentDisplay != expectedDisplay)
-                {
-                    _isUpdatingUI = true;
-                    WidthBox.Value = expectedDisplay;
-                    _isUpdatingUI = false;
-                    UpdateDimensionTextBoxes();
-                }
-            }
-            else if (sender == HeightBox)
-            {
-                int currentDisplay = HeightBox.Value ?? 0;
-                int expectedDisplay = (int)Math.Round(UnitConverter.ConvertPixelsToUnit(_imageState.OutputHeightPx, unit));
-                if (currentDisplay != expectedDisplay)
-                {
-                    _isUpdatingUI = true;
-                    HeightBox.Value = expectedDisplay;
-                    _isUpdatingUI = false;
-                    UpdateDimensionTextBoxes();
-                }
-            }
+            _dimensionsController.OnDimensionBoxLostFocus();
+            UpdateFilenameUI();
         }
-
-        private void MarginBox_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
-        {
-            if (_isUpdatingUI || !IsLoaded) return;
-
-            if (sender == MarginLeftBox)
-                UpdatePixelFromBox(MarginLeftBox, ref _imageState.MarginLeftPx, _imageState.SourceWidthPx, false);
-            else if (sender == MargintopBox)
-                UpdatePixelFromBox(MargintopBox, ref _imageState.MarginTopPx, _imageState.SourceHeightPx, false);
-
-            RefreshUI();
-        }
+        private void MarginBox_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e) =>
+            _dimensionsController.OnMarginBoxValueChanged(sender, IsLoaded);
         #endregion
 
         #region Filename Event Handlers
-        private void ModePrefix_Checked(object sender, RoutedEventArgs e)
-        {
-            UpdateFilenameUI();
-        }
-
-        private void ModeSuffix_Checked(object sender, RoutedEventArgs e)
-        {
-            UpdateFilenameUI();
-        }
 
         private void PreSufBox_LostFocus(object sender, RoutedEventArgs e)
         {
@@ -1073,11 +906,7 @@ namespace BulkCropAndResizeTool
                     MessageBoxImage.Warning,
                     MessageBoxResult.No);
 
-                bool isResize = _imageState.IsResizeMode;
-                bool isPrefix = ModePrefix.IsChecked == true;
-                string defaultText = GetDefaultFilenameText(isResize, isPrefix);
-
-                PreSufBox.Text = defaultText;
+                _userCustomText = null; // clear any stale custom text before reapplying the default
                 UpdateFilenameUI();
 
                 if (result == MessageBoxResult.Yes)
@@ -1086,11 +915,7 @@ namespace BulkCropAndResizeTool
                 }
             }
         }
-
-        private void Overwrite_CheckedChanged(object sender, RoutedEventArgs e)
-        {
-            UpdateFilenameAvailability();
-        }
+        
         #endregion
 
         #region Aspect Ratio Event Handler
@@ -1098,7 +923,7 @@ namespace BulkCropAndResizeTool
         {
             if (AspectRatio.IsChecked == true)
             {
-                AdjustAspectRatio();
+                _dimensionsController.AdjustAspectRatio(anchorIsWidth: true);
             }
         }
         #endregion
@@ -1122,23 +947,8 @@ namespace BulkCropAndResizeTool
                 default: return;
             }
 
-            MoveOverlay(dx, dy);
+            _dimensionsController.MoveOverlay(dx, dy);
             e.Handled = true;
-        }
-        private void MoveOverlay(int dx, int dy)
-        {
-            int newLeft = _imageState.MarginLeftPx + dx;
-            int newTop = _imageState.MarginTopPx + dy;
-
-            newLeft = Math.Clamp(newLeft, 0, _imageState.SourceWidthPx - _imageState.OutputWidthPx);
-            newTop = Math.Clamp(newTop, 0, _imageState.SourceHeightPx - _imageState.OutputHeightPx);
-
-            if (newLeft != _imageState.MarginLeftPx || newTop != _imageState.MarginTopPx)
-            {
-                _imageState.MarginLeftPx = newLeft;
-                _imageState.MarginTopPx = newTop;
-                RefreshUI();
-            }
         }
         #endregion
 
@@ -1204,10 +1014,7 @@ namespace BulkCropAndResizeTool
             if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             {
                 string selectedFolder = dialog.SelectedPath;
-                if (selectedFolder != _lastValidSourcePath)
-                {
-                    ValidateSourceFolder(selectedFolder);
-                }
+                ValidateSourceFolder(selectedFolder);
             }
         }
 
@@ -1238,48 +1045,9 @@ namespace BulkCropAndResizeTool
         #endregion
 
         #region Helper Methods
-        private void UpdatePixelFromBox(IntegerUpDown box, ref int pixelField, int sourceDimensionPx, bool clampToMin = true)
-        {
-            string unit = GetCurrentUnit();
-            double displayValue = box.Value ?? 0;
-
-            if (unit == "%")
-            {
-                pixelField = (int)Math.Round(displayValue / 100.0 * sourceDimensionPx);
-                if (clampToMin && pixelField < 1) pixelField = 1;
-            }
-            else
-            {
-                pixelField = UnitConverter.ConvertUnitToPixels(displayValue, unit, clampToMin);
-            }
-
-            RefreshUI();
-        }
-
-        private void AdjustAspectRatio()
-        {
-            if (!AspectRatio.IsChecked == true) return;
-            if (_imageState.SourceWidthPx <= 0 || _imageState.SourceHeightPx <= 0) return;
-
-            int targetW = _imageState.OutputWidthPx;
-            int targetH = _imageState.OutputHeightPx;
-            var (w, h) = AspectRatioHelper.FindBestAspectRatioPair(targetW, targetH,
-                _imageState.SourceWidthPx, _imageState.SourceHeightPx);
-
-            if (_imageState.IsCropMode)
-            {
-                w = Math.Min(w, _imageState.SourceWidthPx);
-                h = Math.Min(h, _imageState.SourceHeightPx);
-            }
-
-            _imageState.OutputWidthPx = w;
-            _imageState.OutputHeightPx = h;
-            UpdateDimensionTextBoxes();
-        }
-
         private void LoadPath(string path)
         {
-            if (File.Exists(path))
+            if (System.IO.File.Exists(path))
             {
                 string? validPath = _fileService.GetValidDirectoryPath(path);
                 if (DstBox.Text == AppConstants.DefaultDstBoxText || DstBox.Text == _fileService.GetValidDirectoryPath(_lastValidSourcePath))
@@ -1296,12 +1064,18 @@ namespace BulkCropAndResizeTool
                 var files = _fileService.GetImageFiles(path);
                 if (files.Count > 0)
                 {
+                    CurrentFileCount = files.Count;
+                    string? oldSourceDir = _fileService.GetValidDirectoryPath(_lastValidSourcePath);
+                    bool shouldUpdateDst = DstBox.Text == AppConstants.DefaultDstBoxText || DstBox.Text == oldSourceDir;
+
                     LoadPreviewImage(files[0]);
-                    _logger.Log($"Using first image: {System.IO.Path.GetFileName(files[0])}");
                     _lastValidSourcePath = path;
                     _logger.Log($"Selected folder: {path}");
+                    _logger.Log($"Using first image: {System.IO.Path.GetFileName(files[0])}");
                     ActionBtn.IsEnabled = true;
-                    SetDirectoryPath(path);
+
+                    if (shouldUpdateDst)
+                        SetDirectoryPath(path);
                 }
                 else
                 {
@@ -1318,8 +1092,8 @@ namespace BulkCropAndResizeTool
 
         private void ValidateSourceFolder(string selectedFolder)
         {
-            var files = _fileService.GetImageFiles(selectedFolder);
 
+            var files = _fileService.GetImageFiles(selectedFolder);
             if (files.Count == 0)
             {
                 System.Windows.MessageBox.Show(
@@ -1334,9 +1108,22 @@ namespace BulkCropAndResizeTool
 
             SrcBox.Text = selectedFolder;
             _lastValidSourcePath = selectedFolder;
+            OutputLabel.Content = (files.Count == 0) ? "Output" : "Max Output";
+            SetActionBtnText();
             LoadPath(selectedFolder);
         }
+        private void SetActionBtnText()
+        {
+            if (string.IsNullOrWhiteSpace(SrcBox.Text) || SrcBox.Text == AppConstants.DefaultSrcBoxText)
+            {
+                ActionBtn.Content = (ModeCrop.IsChecked == true) ? AppConstants.DefaultSingleCrop : AppConstants.DefaultSingleResize;
+                return;
+            }
 
+            ActionBtn.Content = (ModeCrop.IsChecked == true) ?
+                (CurrentFileCount !> 1 ? AppConstants.DefaultSingleCrop : AppConstants.DefaultMultiCrop) :
+                (CurrentFileCount !> 1 ? AppConstants.DefaultSingleResize : AppConstants.DefaultMultiResize);
+        }
         private void SetDirectoryPath(string path)
         {
             if (string.IsNullOrWhiteSpace(path))
@@ -1376,7 +1163,7 @@ namespace BulkCropAndResizeTool
             }
 
             // If it's a valid file or folder, load dimensions
-            if (File.Exists(path) || Directory.Exists(path))
+            if (System.IO.File.Exists(path) || Directory.Exists(path))
             {
                 if (_lastValidSourcePath != SrcBox.Text)
                 {

@@ -6,24 +6,15 @@ using System.Windows.Input;
 
 namespace BulkCropAndResizeTool.Controls
 {
-    public class CropOverlayController
+    public class CropOverlayController(Border overlay, ImageState imageState, ViewportState viewportState)
     {
-        private readonly Border _overlay;
-        private readonly ImageState _imageState;
-        private readonly ViewportState _viewportState;
-        private bool _isManipulating;
-        private string _resizeMode;
+        private readonly Border _overlay = overlay;
+        private readonly ImageState _imageState = imageState;
+        private readonly ViewportState _viewportState = viewportState;
+        private bool _isManipulating = false;
+        private string _resizeMode = string.Empty;
         private Point _startMousePos;
         private int _startMarginLeftPx, _startMarginTopPx, _startWidthPx, _startHeightPx;
-
-        public CropOverlayController(Border overlay, ImageState imageState, ViewportState viewportState)
-        {
-            _overlay = overlay;
-            _imageState = imageState;
-            _viewportState = viewportState;
-            _isManipulating = false;
-            _resizeMode = string.Empty;
-        }
 
         public bool IsManipulating => _isManipulating;
 

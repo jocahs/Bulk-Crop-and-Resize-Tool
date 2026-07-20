@@ -33,16 +33,10 @@ namespace BulkCropAndResizeTool.Services
             CancellationToken cancellationToken = default);
     }
 
-    public class BatchProcessor : IBatchProcessor
+    public class BatchProcessor(ImageProcessingService imageService, LoggingService logger) : IBatchProcessor
     {
-        private readonly ImageProcessingService _imageService;
-        private readonly LoggingService _logger;
-
-        public BatchProcessor(ImageProcessingService imageService, LoggingService logger)
-        {
-            _imageService = imageService;
-            _logger = logger;
-        }
+        private readonly ImageProcessingService _imageService = imageService;
+        private readonly LoggingService _logger = logger;
 
         public async Task ProcessBatchAsync(
             List<string> files,
